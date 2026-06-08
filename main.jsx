@@ -3,7 +3,7 @@ import { createRoot } from 'react-dom/client';
 import { RotateCw, Trash2, Plus, RotateCcw, Save, X, Edit3, MousePointer2, Grid3X3, Upload, Copy, Mail } from 'lucide-react';
 import './styles.css';
 
-const STORAGE_KEY = 'truck-loading-simulator-v7';
+const STORAGE_KEY = 'truck-loading-simulator-v8';
 const PX_PER_METER = 76;
 const DEFAULT_STATE = {
   trailer: { length: 13.6, width: 2.45 },
@@ -13,6 +13,7 @@ const DEFAULT_STATE = {
     { id: crypto.randomUUID(), name: 'Žaluzine', length: 4.0, width: 0.8, qty: 2, color: '#f97316' },
     { id: crypto.randomUUID(), name: 'Rumenka', length: 5.0, width: 0.8, qty: 1, color: '#9333ea' },
     { id: crypto.randomUUID(), name: 'Extra Transfer', length: 6.0, width: 0.8, qty: 1, color: '#dc2626' },
+    { id: crypto.randomUUID(), name: 'Text Transfer Paleta', length: 0.8, width: 0.8, qty: 3, color: '#0891b2' },
   ],
   boxes: [],
   savedLoads: [],
@@ -119,6 +120,7 @@ function escapeXml(text) {
 function formatDateTime(iso) {
   return new Date(iso).toLocaleString('sr-RS', { dateStyle: 'short', timeStyle: 'short' });
 }
+function formatMeters(value) { return `${Number(value).toLocaleString('sr-RS', { maximumFractionDigits: 2 })} m`; }
 
 function encodeSharePayload(payload) {
   const json = JSON.stringify(payload);
@@ -161,6 +163,7 @@ function App() {
   const [mode, setMode] = useState('drag');
   const [selectedBoxId, setSelectedBoxId] = useState(null);
   const [sharedLoad, setSharedLoad] = useState(null);
+  const [showInstructions, setShowInstructions] = useState(false);
   const trailerRef = useRef(null);
 
   useEffect(() => { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); }, [state]);
@@ -208,7 +211,7 @@ function App() {
     });
   }
   function addType() {
-    const newType = { id: crypto.randomUUID(), name: 'Nova roba', length: 1.2, width: 0.8, qty: 1, color: '#22c55e' };
+    const newType = { id: crypto.randomUUID(), name: 'Nova stavka robe', length: 1.0, width: 0.8, qty: 1, color: '#22c55e' };
     setState(s => ({ ...s, cargoTypes: [...s.cargoTypes, newType], boxes: makeBoxesFromTypes([...s.cargoTypes, newType], s.boxes) }));
   }
   function deleteType(id) {
@@ -266,14 +269,18 @@ function App() {
       const bh = movingBox.rotated ? movingBox.length : movingBox.width;
       const laneHeight = s.trailer.width / LANES;
       const laneIndex = clamp(Math.floor(p.y / laneHeight), 0, LANES - 1);
-      const laneY = clamp(laneIndex * laneHeight, 0, Math.max(0, s.trailer.width - bh));
-
-      // Smart click placement: keep three clear lanes by width, and snap X to nearest click/grid.
-      // It does not auto-pack left/right unless the user clicks there, so real gaps stay visible.
-      let x = clamp(snapToGrid(p.x), 0, Math.max(0, s.trailer.length - bw));
-      const candidate = { ...movingBox, placed: true, x, y: laneY };
-      const snappedBox = snapBoxPosition(candidate, s.boxes, s.trailer);
-      return { ...s, boxes: s.boxes.map(b => b.id === selectedBoxId ? snappedBox : b) };
+      const laneTop = laneIndex * laneHeight;
+      const laneY = clamp(laneTop + Math.max(0, (laneHeight - bh) / 2), 0, Math.max(0, s.trailer.width - bh));
+      const laneStart = laneTop;
+      const laneEnd = laneTop + laneHeight;
+      const laneBoxes = s.boxes
+        .filter(b => b.placed && rangesOverlap(boxRect(b).y, boxRect(b).y + boxRect(b).h, laneStart, laneEnd))
+        .map(b => boxRect(b));
+      const nextX = laneBoxes.length ? Math.max(...laneBoxes.map(r => r.x + r.w)) : 0;
+      // Grid Click is locked: user chooses only the lane. The app snaps to the left edge
+      // for the first box and then directly behind the last box in that lane.
+      const candidate = { ...movingBox, placed: true, x: snapToGrid(nextX), y: laneY };
+      return { ...s, boxes: s.boxes.map(b => b.id === selectedBoxId ? candidate : b) };
     });
   }
   function rotateBox(id) { setState(s => ({ ...s, boxes: s.boxes.map(b => b.id === id ? { ...b, rotated: !b.rotated } : b) })); }
@@ -361,10 +368,28 @@ Težina tereta: ${load.cargoWeight || '-'}`);
           <img src="/verano.jpg" alt="Verano logo" />
         </div>
         <h1>Truck Loading Simulator</h1>
-        <p>2D top-view loading plan • local only</p>
       </div>
-      <div className={validation.valid ? 'status ok' : 'status bad'}>{validation.valid ? 'Sve staje' : 'NEMA MESTA'}</div>
+      <div className="header-actions">
+        <button className="ghost" onClick={() => setShowInstructions(true)}>Uputstvo</button>
+        <div className={validation.valid ? 'status ok' : 'status bad'}>{validation.valid ? 'Sve staje' : 'NEMA MESTA'}</div>
+      </div>
     </header>
+
+    {showInstructions && <div className="modal-backdrop" onClick={() => setShowInstructions(false)}>
+      <div className="modal" onClick={e => e.stopPropagation()}>
+        <div className="modal-head">
+          <h2>Kako koristiti simulator</h2>
+          <button className="ghost" onClick={() => setShowInstructions(false)}><X size={16}/> Zatvori</button>
+        </div>
+        <div className="instructions-grid">
+          <div><h3>1. Izaberi način rada</h3><p><b>Drag & Drop</b> služi za ručno pomeranje robe. Prevuci robu u prikolicu i magnetik će je poravnati uz ivice ili vertikalno ispod/iznad drugog komada.</p><p><b>Grid Click</b> je najbrži režim: izaberi robu, klikni jednu od 3 trake u prikolici i roba ide na sledeće slobodno mesto u toj traci.</p></div>
+          <div><h3>2. Menjanje robe</h3><p>U panelu „Tipovi robe“ možeš promeniti naziv, dužinu, širinu, količinu i boju. Količina povećava ili smanjuje broj dostupnih komada.</p></div>
+          <div><h3>3. Prikolica</h3><p>Možeš promeniti dužinu i širinu/dubinu prikolice. Ako roba ne staje, cela prikolica pocrveni i piše „NEMA MESTA“.</p></div>
+          <div><h3>4. Čuvanje i deljenje</h3><p>Klikni „Sačuvaj prikolicu“ da upišeš trenutni raspored u tabelu. U tabeli možeš dodati vozača, težinu prikolice, težinu tereta, slike, kopirati link ili otvoriti email sa linkom.</p></div>
+          <div><h3>5. Brisanje i reset</h3><p>„Isprazni prikolicu“ vraća svu robu u dostupne komade. „Resetuj sve“ vraća celu aplikaciju na početno stanje.</p></div>
+        </div>
+      </div>
+    </div>}
 
     {sharedLoad && <section className="shared-view">
       <div className="shared-head">
@@ -391,24 +416,20 @@ Težina tereta: ${load.cargoWeight || '-'}`);
       <div><b>{Math.round((validation.usedArea / validation.trailerArea) * 100) || 0}%</b> area used</div>
     </section>
 
-    <section className="mode-panel">
-      <div>
-        <h2>Način pakovanja</h2>
-        <p>Uvek možeš ručno da biraš način rada — nema automatskog prebacivanja na telefonu.</p>
-      </div>
+    <section className="mode-panel compact">
+      <h2>Način pakovanja</h2>
       <div className="mode-buttons">
         <button className={mode === 'drag' ? 'mode-btn active' : 'mode-btn'} onClick={() => setMode('drag')}><MousePointer2 size={16}/> Drag & Drop</button>
         <button className={mode === 'grid' ? 'mode-btn active' : 'mode-btn'} onClick={() => setMode('grid')}><Grid3X3 size={16}/> Grid Click</button>
       </div>
-      {mode === 'grid' && <div className="grid-help">Grid Click: izaberi box, pa klikni u jednu od 3 trake prikolice. Box se postavlja precizno u izabranu traku.</div>}
     </section>
 
     <section className="workspace">
       <aside className="panel">
-        <div className="panel-title"><h2>Tipovi boxeva</h2><button onClick={addType}><Plus size={16}/> Dodaj</button></div>
+        <div className="panel-title"><h2>Tipovi robe</h2><button onClick={addType}><Plus size={16}/> Dodaj</button></div>
         {state.cargoTypes.map(t => <div className="type-card" key={t.id}>
           <input value={t.name} onChange={e => updateType(t.id, { name: e.target.value })}/>
-          <div className="row"><label>Dužina boxa <input type="number" step="0.1" value={t.length} onChange={e => updateType(t.id, { length: e.target.value })}/></label><label>Širina boxa <input type="number" step="0.1" value={t.width} onChange={e => updateType(t.id, { width: e.target.value })}/></label></div>
+          <div className="row"><label>Dužina (m) <input type="number" step="0.1" value={t.length} onChange={e => updateType(t.id, { length: e.target.value })}/></label><label>Širina (m) <input type="number" step="0.1" value={t.width} onChange={e => updateType(t.id, { width: e.target.value })}/></label></div>
           <div className="row"><label>Količina <input type="number" min="0" value={t.qty} onChange={e => updateType(t.id, { qty: e.target.value })}/></label><label>Boja <input type="color" value={t.color} onChange={e => updateType(t.id, { color: e.target.value })}/></label></div>
           <button className="ghost danger" onClick={() => deleteType(t.id)}><Trash2 size={14}/> Obriši tip</button>
         </div>)}
@@ -427,7 +448,7 @@ Težina tereta: ${load.cargoWeight || '-'}`);
               const w = mToPx(b.rotated ? b.width : b.length);
               const h = mToPx(b.rotated ? b.length : b.width);
               return <div key={b.id} onPointerDown={e => startDrag(e, b)} className={`box placed ${invalid ? 'invalid' : ''}`} style={{ left: mToPx(b.x), top: mToPx(b.y), width: w, height: h, background: b.color }}>
-                <strong>{b.name}</strong><span>{b.rotated ? b.width : b.length} × {b.rotated ? b.length : b.width}m</span>
+                <strong>{b.name}</strong><span>{formatMeters(b.rotated ? b.width : b.length)} × {formatMeters(b.rotated ? b.length : b.width)}</span>
                 <div className="box-actions"><button onClick={(e)=>{e.stopPropagation(); rotateBox(b.id)}}><RotateCw size={13}/></button><button onClick={(e)=>{e.stopPropagation(); unplaceBox(b.id)}}><Trash2 size={13}/></button></div>
               </div>;
             })}
@@ -439,10 +460,9 @@ Težina tereta: ${load.cargoWeight || '-'}`);
           <button className="danger" onClick={resetAll}><Trash2 size={16}/> Resetuj sve</button>
           <span><Save size={15}/> Automatski sačuvano lokalno</span>
         </div>
-        <p className="snap-note">Magnetic snap: box se lepi na ivice prikolice i može da se složi ispod/iznad drugog boxa. Ne lepi se automatski levo/desno, da bi razmak po dužini ostao stvaran.</p>
-        <h2>Dostupni boxevi</h2>
+        <h2>Dostupna roba</h2>
         <div className="available">
-          {unplaced.map(b => <div key={b.id} onPointerDown={e => mode === 'drag' ? startDrag(e, b) : selectForGrid(b)} className={`box preview ${selectedBoxId === b.id ? 'selected-box' : ''}`} style={{ background: b.color }}><strong>{b.name}</strong><span>{b.length} × {b.width}m</span>{mode === 'grid' && selectedBoxId === b.id && <em>Izabran</em>}</div>)}
+          {unplaced.map(b => <div key={b.id} onPointerDown={e => mode === 'drag' ? startDrag(e, b) : selectForGrid(b)} className={`box preview ${selectedBoxId === b.id ? 'selected-box' : ''}`} style={{ background: b.color }}><strong>{b.name}</strong><span>{formatMeters(b.length)} × {formatMeters(b.width)}</span>{mode === 'grid' && selectedBoxId === b.id && <em>Izabran</em>}</div>)}
         </div>
       </section>
     </section>
@@ -450,7 +470,6 @@ Težina tereta: ${load.cargoWeight || '-'}`);
     <section className="saved-section">
       <div className="saved-title">
         <h2>Sačuvane prikolice</h2>
-        <p>Kada klikneš “Sačuvaj prikolicu”, trenutni raspored se upisuje u tabelu. Možeš dodati slike i kopirati share link za prikaz utovara.</p>
       </div>
       <div className="saved-table-wrap">
         <table className="saved-table">
