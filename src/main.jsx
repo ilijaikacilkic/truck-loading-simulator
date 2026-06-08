@@ -1,16 +1,19 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
-import { RotateCw, Trash2, Plus, RotateCcw, Save, X, Edit3, MousePointer2, Grid3X3 } from 'lucide-react';
+import { RotateCw, Trash2, Plus, RotateCcw, Save, X, Edit3, MousePointer2, Grid3X3, Upload, Copy, Mail } from 'lucide-react';
 import './styles.css';
 
-const STORAGE_KEY = 'truck-loading-simulator-v6';
+const STORAGE_KEY = 'truck-loading-simulator-v8';
 const PX_PER_METER = 76;
 const DEFAULT_STATE = {
   trailer: { length: 13.6, width: 2.45 },
   cargoTypes: [
-    { id: crypto.randomUUID(), name: 'Box A', length: 2.4, width: 0.8, qty: 2, color: '#7c3aed' },
-    { id: crypto.randomUUID(), name: 'Box B', length: 1.8, width: 0.8, qty: 3, color: '#0ea5e9' },
-    { id: crypto.randomUUID(), name: 'Box C', length: 3.0, width: 0.8, qty: 1, color: '#f97316' },
+    { id: crypto.randomUUID(), name: 'Roletne', length: 3.5, width: 0.8, qty: 2, color: '#2563eb' },
+    { id: crypto.randomUUID(), name: 'Tende', length: 6.0, width: 0.8, qty: 2, color: '#16a34a' },
+    { id: crypto.randomUUID(), name: 'Žaluzine', length: 4.0, width: 0.8, qty: 2, color: '#f97316' },
+    { id: crypto.randomUUID(), name: 'Rumenka', length: 5.0, width: 0.8, qty: 1, color: '#9333ea' },
+    { id: crypto.randomUUID(), name: 'Extra Transfer', length: 6.0, width: 0.8, qty: 1, color: '#dc2626' },
+    { id: crypto.randomUUID(), name: 'Text Transfer Paleta', length: 0.8, width: 0.8, qty: 3, color: '#0891b2' },
   ],
   boxes: [],
   savedLoads: [],
@@ -29,6 +32,7 @@ function boxRect(box) {
 
 const SNAP_THRESHOLD_M = 18 / PX_PER_METER;
 const GRID_STEP_M = 0.05;
+const LANES = 3;
 function snapToGrid(value) { return Math.round(value / GRID_STEP_M) * GRID_STEP_M; }
 function rangesOverlap(aStart, aEnd, bStart, bEnd) {
   return aStart < bEnd && aEnd > bStart;
@@ -66,6 +70,8 @@ function snapBoxPosition(box, boxes, trailer) {
     if (Math.abs(y - candidate) <= SNAP_THRESHOLD_M) y = candidate;
   }
 
+  x = clamp(x, 0, Math.max(0, trailer.length - bw));
+  y = clamp(y, 0, Math.max(0, trailer.width - bh));
   return { ...box, x, y };
 }
 
@@ -114,6 +120,36 @@ function escapeXml(text) {
 function formatDateTime(iso) {
   return new Date(iso).toLocaleString('sr-RS', { dateStyle: 'short', timeStyle: 'short' });
 }
+function formatMeters(value) { return `${Number(value).toLocaleString('sr-RS', { maximumFractionDigits: 2 })} m`; }
+
+function encodeSharePayload(payload) {
+  const json = JSON.stringify(payload);
+  const bytes = new TextEncoder().encode(json);
+  let binary = '';
+  bytes.forEach(b => binary += String.fromCharCode(b));
+  return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+}
+function decodeSharePayload(encoded) {
+  const normalized = encoded.replace(/-/g, '+').replace(/_/g, '/');
+  const padded = normalized + '='.repeat((4 - normalized.length % 4) % 4);
+  const binary = atob(padded);
+  const bytes = Uint8Array.from(binary, c => c.charCodeAt(0));
+  return JSON.parse(new TextDecoder().decode(bytes));
+}
+function buildSharePayload(load) {
+  return {
+    createdAt: load.createdAt,
+    driverName: load.driverName || '',
+    trailerWeight: load.trailerWeight || '',
+    cargoWeight: load.cargoWeight || '',
+    trailer: load.trailer,
+    boxes: (load.boxes || []).filter(b => b.placed).map(b => ({
+      id: b.id, name: b.name, length: b.length, width: b.width, color: b.color, x: b.x, y: b.y, placed: true, rotated: b.rotated
+    })),
+    valid: load.valid,
+    thumbnail: createThumbnail(load.trailer, load.boxes || []),
+  };
+}
 
 function App() {
   const [state, setState] = useState(() => {
@@ -126,9 +162,18 @@ function App() {
   const [drag, setDrag] = useState(null);
   const [mode, setMode] = useState('drag');
   const [selectedBoxId, setSelectedBoxId] = useState(null);
+  const [sharedLoad, setSharedLoad] = useState(null);
+  const [showInstructions, setShowInstructions] = useState(false);
   const trailerRef = useRef(null);
 
   useEffect(() => { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); }, [state]);
+
+  useEffect(() => {
+    const hash = window.location.hash || '';
+    const match = hash.match(/^#load=(.+)$/);
+    if (!match) return;
+    try { setSharedLoad(decodeSharePayload(match[1])); } catch (err) { console.warn('Invalid shared load link', err); }
+  }, []);
 
   useEffect(() => {
     if (selectedBoxId && !state.boxes.some(b => b.id === selectedBoxId && !b.placed)) {
@@ -166,7 +211,7 @@ function App() {
     });
   }
   function addType() {
-    const newType = { id: crypto.randomUUID(), name: 'New Box', length: 1.2, width: 0.8, qty: 1, color: '#22c55e' };
+    const newType = { id: crypto.randomUUID(), name: 'Nova stavka robe', length: 1.0, width: 0.8, qty: 1, color: '#22c55e' };
     setState(s => ({ ...s, cargoTypes: [...s.cargoTypes, newType], boxes: makeBoxesFromTypes([...s.cargoTypes, newType], s.boxes) }));
   }
   function deleteType(id) {
@@ -192,11 +237,13 @@ function App() {
     setState(s => {
       const movingBox = s.boxes.find(b => b.id === drag.id);
       if (!movingBox) return s;
+      const bw = movingBox.rotated ? movingBox.width : movingBox.length;
+      const bh = movingBox.rotated ? movingBox.length : movingBox.width;
       const rawBox = {
         ...movingBox,
         placed: true,
-        x: clamp(p.x - drag.offsetX, -2, s.trailer.length + 2),
-        y: clamp(p.y - drag.offsetY, -2, s.trailer.width + 2),
+        x: clamp(p.x - drag.offsetX, 0, Math.max(0, s.trailer.length - bw)),
+        y: clamp(p.y - drag.offsetY, 0, Math.max(0, s.trailer.width - bh)),
       };
       const snappedBox = snapBoxPosition(rawBox, s.boxes, s.trailer);
       return { ...s, boxes: s.boxes.map(b => b.id === drag.id ? snappedBox : b) };
@@ -220,14 +267,20 @@ function App() {
       if (!movingBox) return s;
       const bw = movingBox.rotated ? movingBox.width : movingBox.length;
       const bh = movingBox.rotated ? movingBox.length : movingBox.width;
-      const rawBox = {
-        ...movingBox,
-        placed: true,
-        x: clamp(snapToGrid(p.x), 0, Math.max(0, s.trailer.length - bw)),
-        y: clamp(snapToGrid(p.y), 0, Math.max(0, s.trailer.width - bh)),
-      };
-      const snappedBox = snapBoxPosition(rawBox, s.boxes, s.trailer);
-      return { ...s, boxes: s.boxes.map(b => b.id === selectedBoxId ? snappedBox : b) };
+      const laneHeight = s.trailer.width / LANES;
+      const laneIndex = clamp(Math.floor(p.y / laneHeight), 0, LANES - 1);
+      const laneTop = laneIndex * laneHeight;
+      const laneY = clamp(laneTop + Math.max(0, (laneHeight - bh) / 2), 0, Math.max(0, s.trailer.width - bh));
+      const laneStart = laneTop;
+      const laneEnd = laneTop + laneHeight;
+      const laneBoxes = s.boxes
+        .filter(b => b.placed && rangesOverlap(boxRect(b).y, boxRect(b).y + boxRect(b).h, laneStart, laneEnd))
+        .map(b => boxRect(b));
+      const nextX = laneBoxes.length ? Math.max(...laneBoxes.map(r => r.x + r.w)) : 0;
+      // Grid Click is locked: user chooses only the lane. The app snaps to the left edge
+      // for the first box and then directly behind the last box in that lane.
+      const candidate = { ...movingBox, placed: true, x: snapToGrid(nextX), y: laneY };
+      return { ...s, boxes: s.boxes.map(b => b.id === selectedBoxId ? candidate : b) };
     });
   }
   function rotateBox(id) { setState(s => ({ ...s, boxes: s.boxes.map(b => b.id === id ? { ...b, rotated: !b.rotated } : b) })); }
@@ -244,6 +297,7 @@ function App() {
       driverName: '',
       trailerWeight: '',
       cargoWeight: '',
+      photos: [],
       trailer: { ...state.trailer },
       boxes: state.boxes.map(b => ({ ...b })),
       cargoTypes: state.cargoTypes.map(t => ({ ...t })),
@@ -254,6 +308,41 @@ function App() {
   }
   function updateSavedLoad(id, patch) {
     setState(s => ({ ...s, savedLoads: (s.savedLoads || []).map(load => load.id === id ? { ...load, ...patch } : load) }));
+  }
+  function uploadSavedPhotos(id, files) {
+    const selected = Array.from(files || []).slice(0, 6);
+    if (!selected.length) return;
+    Promise.all(selected.map(file => new Promise(resolve => {
+      const reader = new FileReader();
+      reader.onload = () => resolve({ id: crypto.randomUUID(), name: file.name, dataUrl: reader.result });
+      reader.readAsDataURL(file);
+    }))).then(photos => {
+      setState(s => ({ ...s, savedLoads: (s.savedLoads || []).map(load => load.id === id ? { ...load, photos: [...(load.photos || []), ...photos] } : load) }));
+    });
+  }
+  function removeSavedPhoto(loadId, photoId) {
+    setState(s => ({ ...s, savedLoads: (s.savedLoads || []).map(load => load.id === loadId ? { ...load, photos: (load.photos || []).filter(p => p.id !== photoId) } : load) }));
+  }
+  function getShareUrl(load) {
+    const payload = buildSharePayload(load);
+    return `${window.location.origin}${window.location.pathname}#load=${encodeSharePayload(payload)}`;
+  }
+  async function copyShareLink(load) {
+    const url = getShareUrl(load);
+    try { await navigator.clipboard.writeText(url); alert('Link je kopiran.'); }
+    catch { window.prompt('Kopiraj link:', url); }
+  }
+  function emailShare(load) {
+    const url = getShareUrl(load);
+    const subject = encodeURIComponent('Prikaz utovara prikolice');
+    const body = encodeURIComponent(`Prikaz utovara prikolice:
+${url}
+
+Datum: ${formatDateTime(load.createdAt)}
+Vozač: ${load.driverName || '-'}
+Težina prikolice: ${load.trailerWeight || '-'}
+Težina tereta: ${load.cargoWeight || '-'}`);
+    window.location.href = `mailto:?subject=${subject}&body=${body}`;
   }
   function deleteSavedLoad(id) {
     setState(s => ({ ...s, savedLoads: (s.savedLoads || []).filter(load => load.id !== id) }));
@@ -279,10 +368,45 @@ function App() {
           <img src="/verano.jpg" alt="Verano logo" />
         </div>
         <h1>Truck Loading Simulator</h1>
-        <p>2D top-view loading plan • local only</p>
       </div>
-      <div className={validation.valid ? 'status ok' : 'status bad'}>{validation.valid ? 'Sve staje' : 'NEMA MESTA'}</div>
+      <div className="header-actions">
+        <button className="ghost" onClick={() => setShowInstructions(true)}>Uputstvo</button>
+        <div className={validation.valid ? 'status ok' : 'status bad'}>{validation.valid ? 'Sve staje' : 'NEMA MESTA'}</div>
+      </div>
     </header>
+
+    {showInstructions && <div className="modal-backdrop" onClick={() => setShowInstructions(false)}>
+      <div className="modal" onClick={e => e.stopPropagation()}>
+        <div className="modal-head">
+          <h2>Kako koristiti simulator</h2>
+          <button className="ghost" onClick={() => setShowInstructions(false)}><X size={16}/> Zatvori</button>
+        </div>
+        <div className="instructions-grid">
+          <div><h3>1. Izaberi način rada</h3><p><b>Drag & Drop</b> služi za ručno pomeranje robe. Prevuci robu u prikolicu i magnetik će je poravnati uz ivice ili vertikalno ispod/iznad drugog komada.</p><p><b>Grid Click</b> je najbrži režim: izaberi robu, klikni jednu od 3 trake u prikolici i roba ide na sledeće slobodno mesto u toj traci.</p></div>
+          <div><h3>2. Menjanje robe</h3><p>U panelu „Tipovi robe“ možeš promeniti naziv, dužinu, širinu, količinu i boju. Količina povećava ili smanjuje broj dostupnih komada.</p></div>
+          <div><h3>3. Prikolica</h3><p>Možeš promeniti dužinu i širinu/dubinu prikolice. Ako roba ne staje, cela prikolica pocrveni i piše „NEMA MESTA“.</p></div>
+          <div><h3>4. Čuvanje i deljenje</h3><p>Klikni „Sačuvaj prikolicu“ da upišeš trenutni raspored u tabelu. U tabeli možeš dodati vozača, težinu prikolice, težinu tereta, slike, kopirati link ili otvoriti email sa linkom.</p></div>
+          <div><h3>5. Brisanje i reset</h3><p>„Isprazni prikolicu“ vraća svu robu u dostupne komade. „Resetuj sve“ vraća celu aplikaciju na početno stanje.</p></div>
+        </div>
+      </div>
+    </div>}
+
+    {sharedLoad && <section className="shared-view">
+      <div className="shared-head">
+        <div><h2>Deljeni prikaz utovara</h2><p>Ovo je samo prikaz sačuvane prikolice. Bez direktnog pristupa tuđoj lokalnoj istoriji ili slikama.</p></div>
+        <button className="ghost" onClick={() => { window.location.hash = ''; setSharedLoad(null); }}><X size={16}/> Zatvori prikaz</button>
+      </div>
+      <div className="shared-card">
+        <img src={sharedLoad.thumbnail} alt="Prikaz utovara" />
+        <div>
+          <b>Datum:</b> {sharedLoad.createdAt ? formatDateTime(sharedLoad.createdAt) : '-'}<br/>
+          <b>Vozač:</b> {sharedLoad.driverName || '-'}<br/>
+          <b>Težina prikolice:</b> {sharedLoad.trailerWeight || '-'}<br/>
+          <b>Težina tereta:</b> {sharedLoad.cargoWeight || '-'}<br/>
+          <b>Status:</b> {sharedLoad.valid ? 'OK' : 'NEMA MESTA'}
+        </div>
+      </div>
+    </section>}
 
     <section className="metrics">
       <label>Dužina prikolice <input type="number" step="0.1" value={state.trailer.length} onChange={e => updateTrailer('length', e.target.value)} /> m</label>
@@ -292,24 +416,20 @@ function App() {
       <div><b>{Math.round((validation.usedArea / validation.trailerArea) * 100) || 0}%</b> area used</div>
     </section>
 
-    <section className="mode-panel">
-      <div>
-        <h2>Način pakovanja</h2>
-        <p>Uvek možeš ručno da biraš način rada — nema automatskog prebacivanja na telefonu.</p>
-      </div>
+    <section className="mode-panel compact">
+      <h2>Način pakovanja</h2>
       <div className="mode-buttons">
         <button className={mode === 'drag' ? 'mode-btn active' : 'mode-btn'} onClick={() => setMode('drag')}><MousePointer2 size={16}/> Drag & Drop</button>
         <button className={mode === 'grid' ? 'mode-btn active' : 'mode-btn'} onClick={() => setMode('grid')}><Grid3X3 size={16}/> Grid Click</button>
       </div>
-      {mode === 'grid' && <div className="grid-help">Grid Click: izaberi box iz “Dostupni boxevi”, pa klikni mesto u prikolici gde želiš da ga postaviš.</div>}
     </section>
 
     <section className="workspace">
       <aside className="panel">
-        <div className="panel-title"><h2>Tipovi boxeva</h2><button onClick={addType}><Plus size={16}/> Dodaj</button></div>
+        <div className="panel-title"><h2>Tipovi robe</h2><button onClick={addType}><Plus size={16}/> Dodaj</button></div>
         {state.cargoTypes.map(t => <div className="type-card" key={t.id}>
           <input value={t.name} onChange={e => updateType(t.id, { name: e.target.value })}/>
-          <div className="row"><label>Dužina boxa <input type="number" step="0.1" value={t.length} onChange={e => updateType(t.id, { length: e.target.value })}/></label><label>Širina boxa <input type="number" step="0.1" value={t.width} onChange={e => updateType(t.id, { width: e.target.value })}/></label></div>
+          <div className="row"><label>Dužina (m) <input type="number" step="0.1" value={t.length} onChange={e => updateType(t.id, { length: e.target.value })}/></label><label>Širina (m) <input type="number" step="0.1" value={t.width} onChange={e => updateType(t.id, { width: e.target.value })}/></label></div>
           <div className="row"><label>Količina <input type="number" min="0" value={t.qty} onChange={e => updateType(t.id, { qty: e.target.value })}/></label><label>Boja <input type="color" value={t.color} onChange={e => updateType(t.id, { color: e.target.value })}/></label></div>
           <button className="ghost danger" onClick={() => deleteType(t.id)}><Trash2 size={14}/> Obriši tip</button>
         </div>)}
@@ -321,12 +441,14 @@ function App() {
           <div className={`trailer ${validation.valid ? '' : 'bad-trailer'}`} ref={trailerRef} style={trailerStyle} onPointerDown={placeSelectedAt}>
             {!validation.valid && <div className="no-space-banner">NEMA MESTA</div>}
             <div className="dim dim-side">{state.trailer.width} m</div>
+            <div className="lane-line lane-line-1"></div>
+            <div className="lane-line lane-line-2"></div>
             {placed.map(b => {
               const invalid = validation.invalidIds.has(b.id);
               const w = mToPx(b.rotated ? b.width : b.length);
               const h = mToPx(b.rotated ? b.length : b.width);
               return <div key={b.id} onPointerDown={e => startDrag(e, b)} className={`box placed ${invalid ? 'invalid' : ''}`} style={{ left: mToPx(b.x), top: mToPx(b.y), width: w, height: h, background: b.color }}>
-                <strong>{b.name}</strong><span>{b.rotated ? b.width : b.length} × {b.rotated ? b.length : b.width}m</span>
+                <strong>{b.name}</strong><span>{formatMeters(b.rotated ? b.width : b.length)} × {formatMeters(b.rotated ? b.length : b.width)}</span>
                 <div className="box-actions"><button onClick={(e)=>{e.stopPropagation(); rotateBox(b.id)}}><RotateCw size={13}/></button><button onClick={(e)=>{e.stopPropagation(); unplaceBox(b.id)}}><Trash2 size={13}/></button></div>
               </div>;
             })}
@@ -338,10 +460,9 @@ function App() {
           <button className="danger" onClick={resetAll}><Trash2 size={16}/> Resetuj sve</button>
           <span><Save size={15}/> Automatski sačuvano lokalno</span>
         </div>
-        <p className="snap-note">Magnetic snap: box se lepi na ivice prikolice i može da se složi ispod/iznad drugog boxa. Ne lepi se automatski levo/desno, da bi razmak po dužini ostao stvaran.</p>
-        <h2>Dostupni boxevi</h2>
+        <h2>Dostupna roba</h2>
         <div className="available">
-          {unplaced.map(b => <div key={b.id} onPointerDown={e => mode === 'drag' ? startDrag(e, b) : selectForGrid(b)} className={`box preview ${selectedBoxId === b.id ? 'selected-box' : ''}`} style={{ background: b.color }}><strong>{b.name}</strong><span>{b.length} × {b.width}m</span>{mode === 'grid' && selectedBoxId === b.id && <em>Izabran</em>}</div>)}
+          {unplaced.map(b => <div key={b.id} onPointerDown={e => mode === 'drag' ? startDrag(e, b) : selectForGrid(b)} className={`box preview ${selectedBoxId === b.id ? 'selected-box' : ''}`} style={{ background: b.color }}><strong>{b.name}</strong><span>{formatMeters(b.length)} × {formatMeters(b.width)}</span>{mode === 'grid' && selectedBoxId === b.id && <em>Izabran</em>}</div>)}
         </div>
       </section>
     </section>
@@ -349,7 +470,6 @@ function App() {
     <section className="saved-section">
       <div className="saved-title">
         <h2>Sačuvane prikolice</h2>
-        <p>Kada klikneš “Sačuvaj prikolicu”, trenutni raspored se upisuje u tabelu.</p>
       </div>
       <div className="saved-table-wrap">
         <table className="saved-table">
@@ -360,19 +480,26 @@ function App() {
               <th>Ime vozača</th>
               <th>Težina prikolice</th>
               <th>Težina tereta</th>
+              <th>Slike</th>
               <th>Status</th>
+              <th>Share</th>
               <th></th>
             </tr>
           </thead>
           <tbody>
-            {(state.savedLoads || []).length === 0 && <tr><td colSpan="7" className="empty-row">Još nema sačuvanih prikolica.</td></tr>}
+            {(state.savedLoads || []).length === 0 && <tr><td colSpan="9" className="empty-row">Još nema sačuvanih prikolica.</td></tr>}
             {(state.savedLoads || []).map(load => <tr key={load.id}>
               <td><img className="thumb" src={load.thumbnail} alt="Sačuvan raspored prikolice" /></td>
               <td>{formatDateTime(load.createdAt)}</td>
               <td><input placeholder="Ime vozača" value={load.driverName} onChange={e => updateSavedLoad(load.id, { driverName: e.target.value })}/></td>
               <td><input placeholder="npr. 7200 kg" value={load.trailerWeight} onChange={e => updateSavedLoad(load.id, { trailerWeight: e.target.value })}/></td>
               <td><input placeholder="npr. 18000 kg" value={load.cargoWeight} onChange={e => updateSavedLoad(load.id, { cargoWeight: e.target.value })}/></td>
+              <td>
+                <label className="upload-btn"><Upload size={14}/> Dodaj slike<input type="file" accept="image/*" multiple onChange={e => uploadSavedPhotos(load.id, e.target.files)} /></label>
+                <div className="photo-strip">{(load.photos || []).map(photo => <span key={photo.id} className="photo-mini"><img src={photo.dataUrl} alt={photo.name}/><button onClick={() => removeSavedPhoto(load.id, photo.id)}>×</button></span>)}</div>
+              </td>
               <td><span className={load.valid ? 'mini-status ok' : 'mini-status bad'}>{load.valid ? 'OK' : 'Nema mesta'}</span></td>
+              <td className="share-actions"><button onClick={() => copyShareLink(load)}><Copy size={15}/> Link</button><button onClick={() => emailShare(load)}><Mail size={15}/> Email</button></td>
               <td className="saved-actions"><button onClick={() => loadSavedLoad(load)}><Edit3 size={15}/> Učitaj</button><button className="icon-danger" onClick={() => deleteSavedLoad(load.id)}><Trash2 size={15}/></button></td>
             </tr>)}
           </tbody>
