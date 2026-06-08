@@ -13,7 +13,7 @@ const DEFAULT_STATE = {
     { id: crypto.randomUUID(), name: 'Žaluzine', length: 4.0, width: 0.8, qty: 2, color: '#f97316' },
     { id: crypto.randomUUID(), name: 'Rumenka', length: 5.0, width: 0.8, qty: 1, color: '#9333ea' },
     { id: crypto.randomUUID(), name: 'Extra Transfer', length: 6.0, width: 0.8, qty: 1, color: '#dc2626' },
-    { id: crypto.randomUUID(), name: 'Text Transfer Paleta', length: 0.8, width: 0.8, qty: 3, color: '#0891b2' },
+    { id: crypto.randomUUID(), name: 'Paleta', length: 0.8, width: 0.8, qty: 3, color: '#0891b2' },
   ],
   boxes: [],
   savedLoads: [],
