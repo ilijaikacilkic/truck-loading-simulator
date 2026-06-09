@@ -1,10 +1,14 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
-import { RotateCw, Trash2, Plus, RotateCcw, Save, X, Edit3, MousePointer2, Grid3X3, Upload, Copy, Mail } from 'lucide-react';
+import { RotateCw, Trash2, Plus, RotateCcw, Save, X, Edit3, MousePointer2, Grid3X3, Upload, Copy, Mail, Camera, FileSpreadsheet, ClipboardList, ArrowLeft, Send } from 'lucide-react';
 import './styles.css';
 
 const STORAGE_KEY = 'truck-loading-simulator-v8';
 const PX_PER_METER = 76;
+const MARIJA_EMAIL = 'ilija.ilkic@hotmail.co.uk'; // OVDE upiši Marijin email
+const QR_STORAGE_KEY = 'truck-loading-simulator-qr-table-v1';
+const QR_PRODUCT_TYPES = ['Roletne', 'Tende', 'Žaluzine', 'Extra Transfer'];
+
 const DEFAULT_STATE = {
   trailer: { length: 13.6, width: 2.45 },
   cargoTypes: [
@@ -151,6 +155,30 @@ function buildSharePayload(load) {
   };
 }
 
+function formatQrRowsForEmail(rows) {
+  if (!rows.length) return 'Tabela je prazna.';
+  const header = '#	Broj boksa	Tip robe	Opis';
+  const lines = rows.map((row, index) => `${index + 1}	${row.boxNumber}	${row.productType}	${row.description || '-'}`);
+  return [header, ...lines].join('\n');
+}
+function downloadQrCsv(rows) {
+  const header = ['#', 'Broj boksa', 'Tip robe', 'Opis'];
+  const csvRows = rows.map((row, index) => [index + 1, row.boxNumber, row.productType, row.description || '']);
+  const csv = [header, ...csvRows]
+    .map(cols => cols.map(value => `"${String(value).replace(/"/g, '""')}"`).join(';'))
+    .join('\n');
+  const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `qr-tabela-${new Date().toISOString().slice(0, 10)}.csv`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
+
 function App() {
   const [state, setState] = useState(() => {
     try {
@@ -164,9 +192,20 @@ function App() {
   const [selectedBoxId, setSelectedBoxId] = useState(null);
   const [sharedLoad, setSharedLoad] = useState(null);
   const [showInstructions, setShowInstructions] = useState(false);
+  const [qrMode, setQrMode] = useState(false);
+  const [qrRows, setQrRows] = useState(() => {
+    try { return JSON.parse(localStorage.getItem(QR_STORAGE_KEY)) || []; } catch { return []; }
+  });
+  const [pendingQr, setPendingQr] = useState('');
+  const [manualQrValue, setManualQrValue] = useState('');
+  const [scannerError, setScannerError] = useState('');
+  const videoRef = useRef(null);
+  const streamRef = useRef(null);
+  const scanLoopRef = useRef(null);
   const trailerRef = useRef(null);
 
   useEffect(() => { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); }, [state]);
+  useEffect(() => { localStorage.setItem(QR_STORAGE_KEY, JSON.stringify(qrRows)); }, [qrRows]);
 
   useEffect(() => {
     const hash = window.location.hash || '';
@@ -174,6 +213,57 @@ function App() {
     if (!match) return;
     try { setSharedLoad(decodeSharePayload(match[1])); } catch (err) { console.warn('Invalid shared load link', err); }
   }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    async function startQrScanner() {
+      if (!qrMode || pendingQr) return;
+      if (!navigator.mediaDevices?.getUserMedia) {
+        setScannerError('Kamera nije dostupna u ovom browseru. Možeš ručno upisati broj boksa.');
+        return;
+      }
+      if (!('BarcodeDetector' in window)) {
+        setScannerError('QR skener nije podržan u ovom browseru. Možeš ručno upisati broj boksa.');
+        return;
+      }
+      try {
+        setScannerError('');
+        const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' }, audio: false });
+        if (cancelled) {
+          stream.getTracks().forEach(track => track.stop());
+          return;
+        }
+        streamRef.current = stream;
+        if (videoRef.current) {
+          videoRef.current.srcObject = stream;
+          await videoRef.current.play();
+        }
+        const detector = new window.BarcodeDetector({ formats: ['qr_code'] });
+        const scan = async () => {
+          if (cancelled || !videoRef.current || pendingQr) return;
+          try {
+            const codes = await detector.detect(videoRef.current);
+            const value = codes?.[0]?.rawValue?.trim();
+            if (value) {
+              setPendingQr(value);
+              return;
+            }
+          } catch {}
+          scanLoopRef.current = requestAnimationFrame(scan);
+        };
+        scanLoopRef.current = requestAnimationFrame(scan);
+      } catch (err) {
+        setScannerError('Kamera nije pokrenuta. Proveri dozvolu za kameru ili ručno upiši broj boksa.');
+      }
+    }
+    startQrScanner();
+    return () => {
+      cancelled = true;
+      if (scanLoopRef.current) cancelAnimationFrame(scanLoopRef.current);
+      streamRef.current?.getTracks()?.forEach(track => track.stop());
+      streamRef.current = null;
+    };
+  }, [qrMode, pendingQr]);
 
   useEffect(() => {
     if (selectedBoxId && !state.boxes.some(b => b.id === selectedBoxId && !b.placed)) {
@@ -357,6 +447,48 @@ Težina tereta: ${load.cargoWeight || '-'}`);
     window.scrollTo({ top: 0, behavior: 'smooth' });
   }
 
+
+  function addManualQr() {
+    const value = manualQrValue.trim();
+    if (!value) return;
+    setPendingQr(value);
+    setManualQrValue('');
+  }
+  function confirmQrType(productType) {
+    if (!pendingQr) return;
+    const newRow = {
+      id: crypto.randomUUID(),
+      boxNumber: pendingQr,
+      productType,
+      description: '',
+      createdAt: new Date().toISOString(),
+    };
+    setQrRows(rows => [...rows, newRow]);
+    setPendingQr('');
+  }
+  function updateQrRow(id, patch) {
+    setQrRows(rows => rows.map(row => row.id === id ? { ...row, ...patch } : row));
+  }
+  function deleteQrRow(id) {
+    setQrRows(rows => rows.filter(row => row.id !== id));
+  }
+  async function copyQrTable() {
+    const table = formatQrRowsForEmail(qrRows);
+    try { await navigator.clipboard.writeText(table); alert('Tabela je kopirana.'); }
+    catch { window.prompt('Kopiraj tabelu:', table); }
+  }
+  function emailMarija() {
+    const subject = encodeURIComponent(`Tabela boksova - ${new Date().toLocaleDateString('sr-RS')}`);
+    const body = encodeURIComponent(`Zdravo Marija,
+
+U nastavku je tabela skeniranih boksova:
+
+${formatQrRowsForEmail(qrRows)}
+
+Pozdrav`);
+    window.location.href = `mailto:${MARIJA_EMAIL}?subject=${subject}&body=${body}`;
+  }
+
   const trailerStyle = { width: mToPx(state.trailer.length), height: Math.max(mToPx(state.trailer.width), 210) };
 
   return <main className="app" onPointerMove={onPointerMove} onPointerUp={onPointerUp}>
@@ -370,6 +502,7 @@ Težina tereta: ${load.cargoWeight || '-'}`);
         <h1>Truck Loading Simulator</h1>
       </div>
       <div className="header-actions">
+        <button className={qrMode ? 'ghost active-view' : 'ghost'} onClick={() => setQrMode(v => !v)}>{qrMode ? <><ArrowLeft size={16}/> Simulator</> : <><ClipboardList size={16}/> QR tabela</>}</button>
         <button className="ghost" onClick={() => setShowInstructions(true)}>Uputstvo</button>
         <div className={validation.valid ? 'status ok' : 'status bad'}>{validation.valid ? 'Sve staje' : 'NEMA MESTA'}</div>
       </div>
@@ -387,6 +520,7 @@ Težina tereta: ${load.cargoWeight || '-'}`);
           <div><h3>3. Prikolica</h3><p>Možeš promeniti dužinu i širinu/dubinu prikolice. Ako roba ne staje, cela prikolica pocrveni i piše „NEMA MESTA“.</p></div>
           <div><h3>4. Čuvanje i deljenje</h3><p>Klikni „Sačuvaj prikolicu“ da upišeš trenutni raspored u tabelu. U tabeli možeš dodati vozača, težinu prikolice, težinu tereta, slike, kopirati link ili otvoriti email sa linkom.</p></div>
           <div><h3>5. Brisanje i reset</h3><p>„Isprazni prikolicu“ vraća svu robu u dostupne komade. „Resetuj sve“ vraća celu aplikaciju na početno stanje.</p></div>
+          <div><h3>6. QR tabela</h3><p>Gore desno klikni „QR tabela“. Skeniraj QR kod boksa, izaberi tip robe i red se automatski dodaje u tabelu. Opis možeš ručno dopisati. Dugme „Pošalji Mariji“ otvara Outlook/mail aplikaciju sa tabelom u tekstu poruke.</p></div>
         </div>
       </div>
     </div>}
@@ -408,6 +542,63 @@ Težina tereta: ${load.cargoWeight || '-'}`);
       </div>
     </section>}
 
+    {qrMode && <section className="qr-module">
+      <div className="qr-top">
+        <div className="qr-scanner-card">
+          <div className="qr-scanner-head">
+            <div><h2>QR skeniranje boksova</h2><p>Skeniraj QR kod, zatim izaberi tip robe. Paleta nije u izboru jer nema QR kod.</p></div>
+            <span className="qr-count">{qrRows.length} redova</span>
+          </div>
+          {!pendingQr ? <>
+            <div className="camera-box">
+              <video ref={videoRef} muted playsInline />
+              <div className="scan-frame"><Camera size={26}/><span>Usmeri kameru ka QR kodu</span></div>
+            </div>
+            {scannerError && <div className="scanner-error">{scannerError}</div>}
+            <div className="manual-scan">
+              <input value={manualQrValue} onChange={e => setManualQrValue(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') addManualQr(); }} placeholder="Ručno unesi broj boksa ako kamera ne očita" />
+              <button onClick={addManualQr}>Dodaj broj</button>
+            </div>
+          </> : <div className="type-picker">
+            <h3>Skeniran boks: <span>{pendingQr}</span></h3>
+            <p>Izaberi tip robe za ovaj boks:</p>
+            <div className="type-picker-buttons">
+              {QR_PRODUCT_TYPES.map(type => <button key={type} onClick={() => confirmQrType(type)}>{type}</button>)}
+            </div>
+            <button className="ghost" onClick={() => setPendingQr('')}>Poništi skeniranje</button>
+          </div>}
+        </div>
+      </div>
+
+      <div className="qr-table-section">
+        <div className="qr-table-title">
+          <div><h2>Excel tabela za kancelariju</h2><p>Opis možeš ručno dopisati. Dugme „Pošalji Mariji“ otvara email sa tabelom u telu poruke.</p></div>
+          <div className="qr-actions">
+            <button onClick={emailMarija} disabled={!qrRows.length}><Send size={15}/> Pošalji Mariji</button>
+            <button className="ghost" onClick={copyQrTable} disabled={!qrRows.length}><Copy size={15}/> Kopiraj tabelu</button>
+            <button className="ghost" onClick={() => downloadQrCsv(qrRows)} disabled={!qrRows.length}><FileSpreadsheet size={15}/> Export CSV</button>
+            <button className="danger" onClick={() => { if (confirm('Obrisati celu QR tabelu?')) setQrRows([]); }} disabled={!qrRows.length}><Trash2 size={15}/> Obriši tabelu</button>
+          </div>
+        </div>
+        <div className="qr-table-wrap">
+          <table className="qr-table">
+            <thead><tr><th>#</th><th>Broj boksa</th><th>Tip robe</th><th>Opis</th><th></th></tr></thead>
+            <tbody>
+              {!qrRows.length && <tr><td colSpan="5" className="empty-row">Još nema skeniranih boksova.</td></tr>}
+              {qrRows.map((row, index) => <tr key={row.id}>
+                <td>{index + 1}</td>
+                <td><input value={row.boxNumber} onChange={e => updateQrRow(row.id, { boxNumber: e.target.value })}/></td>
+                <td><select value={row.productType} onChange={e => updateQrRow(row.id, { productType: e.target.value })}>{QR_PRODUCT_TYPES.map(type => <option key={type} value={type}>{type}</option>)}</select></td>
+                <td><input value={row.description} onChange={e => updateQrRow(row.id, { description: e.target.value })} placeholder="Opis / napomena" /></td>
+                <td><button className="icon-danger" onClick={() => deleteQrRow(row.id)}><Trash2 size={15}/></button></td>
+              </tr>)}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>}
+
+    {!qrMode && <>
     <section className="metrics">
       <label>Dužina prikolice <input type="number" step="0.1" value={state.trailer.length} onChange={e => updateTrailer('length', e.target.value)} /> m</label>
       <label>Širina / dubina prikolice <input type="number" step="0.05" value={state.trailer.width} onChange={e => updateTrailer('width', e.target.value)} /> m</label>
@@ -506,6 +697,7 @@ Težina tereta: ${load.cargoWeight || '-'}`);
         </table>
       </div>
     </section>
+    </>}
   </main>;
 }
 
