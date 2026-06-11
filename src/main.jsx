@@ -199,7 +199,6 @@ function App() {
   const [pendingQr, setPendingQr] = useState('');
   const [manualQrValue, setManualQrValue] = useState('');
   const [scannerError, setScannerError] = useState('');
-  const pendingQrRef = useRef('');
   const videoRef = useRef(null);
   const streamRef = useRef(null);
   const scanLoopRef = useRef(null);
@@ -207,7 +206,6 @@ function App() {
 
   useEffect(() => { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); }, [state]);
   useEffect(() => { localStorage.setItem(QR_STORAGE_KEY, JSON.stringify(qrRows)); }, [qrRows]);
-  useEffect(() => { pendingQrRef.current = pendingQr; }, [pendingQr]);
 
   useEffect(() => {
     const hash = window.location.hash || '';
@@ -219,7 +217,7 @@ function App() {
   useEffect(() => {
     let cancelled = false;
     async function startQrScanner() {
-      if (!qrMode) return;
+      if (!qrMode || pendingQr) return;
       if (!navigator.mediaDevices?.getUserMedia) {
         setScannerError('Kamera nije dostupna u ovom browseru. Možeš ručno upisati broj boksa.');
         return;
@@ -230,26 +228,27 @@ function App() {
       }
       try {
         setScannerError('');
-        const stream = streamRef.current || await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' }, audio: false });
+        const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' }, audio: false });
         if (cancelled) {
           stream.getTracks().forEach(track => track.stop());
           return;
         }
         streamRef.current = stream;
-        if (videoRef.current && videoRef.current.srcObject !== stream) {
+        if (videoRef.current) {
           videoRef.current.srcObject = stream;
           await videoRef.current.play();
         }
         const detector = new window.BarcodeDetector({ formats: ['qr_code'] });
         const scan = async () => {
-          if (cancelled || !videoRef.current) return;
-          if (!pendingQrRef.current) {
-            try {
-              const codes = await detector.detect(videoRef.current);
-              const value = codes?.[0]?.rawValue?.trim();
-              if (value) setPendingQr(value);
-            } catch {}
-          }
+          if (cancelled || !videoRef.current || pendingQr) return;
+          try {
+            const codes = await detector.detect(videoRef.current);
+            const value = codes?.[0]?.rawValue?.trim();
+            if (value) {
+              setPendingQr(value);
+              return;
+            }
+          } catch {}
           scanLoopRef.current = requestAnimationFrame(scan);
         };
         scanLoopRef.current = requestAnimationFrame(scan);
@@ -264,7 +263,7 @@ function App() {
       streamRef.current?.getTracks()?.forEach(track => track.stop());
       streamRef.current = null;
     };
-  }, [qrMode]);
+  }, [qrMode, pendingQr]);
 
   useEffect(() => {
     if (selectedBoxId && !state.boxes.some(b => b.id === selectedBoxId && !b.placed)) {
@@ -587,11 +586,11 @@ Pozdrav`);
             <tbody>
               {!qrRows.length && <tr><td colSpan="5" className="empty-row">Još nema skeniranih boksova.</td></tr>}
               {qrRows.map((row, index) => <tr key={row.id}>
-                <td data-label="#">{index + 1}</td>
-                <td data-label="Broj boksa"><input value={row.boxNumber} onChange={e => updateQrRow(row.id, { boxNumber: e.target.value })}/></td>
-                <td data-label="Tip robe"><select value={row.productType} onChange={e => updateQrRow(row.id, { productType: e.target.value })}>{QR_PRODUCT_TYPES.map(type => <option key={type} value={type}>{type}</option>)}</select></td>
-                <td data-label="Opis"><input value={row.description} onChange={e => updateQrRow(row.id, { description: e.target.value })} placeholder="Opis / napomena" /></td>
-                <td data-label="Akcije"><button className="icon-danger" onClick={() => deleteQrRow(row.id)}><Trash2 size={15}/></button></td>
+                <td>{index + 1}</td>
+                <td><input value={row.boxNumber} onChange={e => updateQrRow(row.id, { boxNumber: e.target.value })}/></td>
+                <td><select value={row.productType} onChange={e => updateQrRow(row.id, { productType: e.target.value })}>{QR_PRODUCT_TYPES.map(type => <option key={type} value={type}>{type}</option>)}</select></td>
+                <td><input value={row.description} onChange={e => updateQrRow(row.id, { description: e.target.value })} placeholder="Opis / napomena" /></td>
+                <td><button className="icon-danger" onClick={() => deleteQrRow(row.id)}><Trash2 size={15}/></button></td>
               </tr>)}
             </tbody>
           </table>
@@ -681,18 +680,18 @@ Pozdrav`);
           <tbody>
             {(state.savedLoads || []).length === 0 && <tr><td colSpan="9" className="empty-row">Još nema sačuvanih prikolica.</td></tr>}
             {(state.savedLoads || []).map(load => <tr key={load.id}>
-              <td data-label="Prikaz"><img className="thumb" src={load.thumbnail} alt="Sačuvan raspored prikolice" /></td>
-              <td data-label="Datum i vreme">{formatDateTime(load.createdAt)}</td>
-              <td data-label="Ime vozača"><input placeholder="Ime vozača" value={load.driverName} onChange={e => updateSavedLoad(load.id, { driverName: e.target.value })}/></td>
-              <td data-label="Težina prikolice"><input placeholder="npr. 7200 kg" value={load.trailerWeight} onChange={e => updateSavedLoad(load.id, { trailerWeight: e.target.value })}/></td>
-              <td data-label="Težina tereta"><input placeholder="npr. 18000 kg" value={load.cargoWeight} onChange={e => updateSavedLoad(load.id, { cargoWeight: e.target.value })}/></td>
-              <td data-label="Slike">
+              <td><img className="thumb" src={load.thumbnail} alt="Sačuvan raspored prikolice" /></td>
+              <td>{formatDateTime(load.createdAt)}</td>
+              <td><input placeholder="Ime vozača" value={load.driverName} onChange={e => updateSavedLoad(load.id, { driverName: e.target.value })}/></td>
+              <td><input placeholder="npr. 7200 kg" value={load.trailerWeight} onChange={e => updateSavedLoad(load.id, { trailerWeight: e.target.value })}/></td>
+              <td><input placeholder="npr. 18000 kg" value={load.cargoWeight} onChange={e => updateSavedLoad(load.id, { cargoWeight: e.target.value })}/></td>
+              <td>
                 <label className="upload-btn"><Upload size={14}/> Dodaj slike<input type="file" accept="image/*" multiple onChange={e => uploadSavedPhotos(load.id, e.target.files)} /></label>
                 <div className="photo-strip">{(load.photos || []).map(photo => <span key={photo.id} className="photo-mini"><img src={photo.dataUrl} alt={photo.name}/><button onClick={() => removeSavedPhoto(load.id, photo.id)}>×</button></span>)}</div>
               </td>
-              <td data-label="Status"><span className={load.valid ? 'mini-status ok' : 'mini-status bad'}>{load.valid ? 'OK' : 'Nema mesta'}</span></td>
-              <td data-label="Share" className="share-actions"><button onClick={() => copyShareLink(load)}><Copy size={15}/> Link</button><button onClick={() => emailShare(load)}><Mail size={15}/> Email</button></td>
-              <td data-label="Akcije" className="saved-actions"><button onClick={() => loadSavedLoad(load)}><Edit3 size={15}/> Učitaj</button><button className="icon-danger" onClick={() => deleteSavedLoad(load.id)}><Trash2 size={15}/></button></td>
+              <td><span className={load.valid ? 'mini-status ok' : 'mini-status bad'}>{load.valid ? 'OK' : 'Nema mesta'}</span></td>
+              <td className="share-actions"><button onClick={() => copyShareLink(load)}><Copy size={15}/> Link</button><button onClick={() => emailShare(load)}><Mail size={15}/> Email</button></td>
+              <td className="saved-actions"><button onClick={() => loadSavedLoad(load)}><Edit3 size={15}/> Učitaj</button><button className="icon-danger" onClick={() => deleteSavedLoad(load.id)}><Trash2 size={15}/></button></td>
             </tr>)}
           </tbody>
         </table>
