@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
-import { RotateCw, Trash2, Plus, RotateCcw, Save, X, Edit3, MousePointer2, Grid3X3, Upload, Copy, Mail, Camera, FileSpreadsheet, ClipboardList, ArrowLeft, Send } from 'lucide-react';
+import { RotateCw, Trash2, Plus, RotateCcw, Save, X, Edit3, MousePointer2, Grid3X3, Upload, Copy, Mail, Camera, FileSpreadsheet, ClipboardList, ArrowLeft, Send, Truck, QrCode, Repeat2, ListOrdered, History, Clock3, Home, Timer, PackageCheck } from 'lucide-react';
 import './styles.css';
 
 const STORAGE_KEY = 'truck-loading-simulator-v8';
@@ -8,6 +8,20 @@ const PX_PER_METER = 76;
 const MARIJA_EMAIL = 'ilija.ilkic@hotmail.co.uk'; // OVDE upiši Marijin email
 const QR_STORAGE_KEY = 'truck-loading-simulator-qr-table-v1';
 const QR_PRODUCT_TYPES = ['Roletne', 'Tende', 'Žaluzine', 'Extra Transfer'];
+const TRANSFER_STORAGE_KEY = 'verano-transfer-records-v1';
+const COUNT_STORAGE_KEY = 'verano-count-records-v1';
+const APP_QUOTES = [
+  'Marija čeka tabelu.',
+  'Ostavi napolitanku Jovane.',
+  'Počni da skeniraš Golube.',
+  'Pazi da ti Sveta nije iza ledja.',
+  'Koliko Rumenka ima bokseva???.',
+  'Daj plave bokseve....',
+  'Ajde ti, nije mi nidočega.',
+  'Sveta je bio na ostrvu!.',
+  'Kaži 8.',
+  'Si pregledao boks? Jesam (zna da nije).'
+];
 
 const DEFAULT_STATE = {
   trailer: { length: 13.6, width: 2.45 },
@@ -193,10 +207,23 @@ function App() {
   const [sharedLoad, setSharedLoad] = useState(null);
   const [showInstructions, setShowInstructions] = useState(false);
   const [qrMode, setQrMode] = useState(false);
+  const [appView, setAppView] = useState('home');
+  const [quoteIndex, setQuoteIndex] = useState(() => Math.floor(Math.random() * APP_QUOTES.length));
+  const [now, setNow] = useState(() => new Date());
+  const [viewportWidth, setViewportWidth] = useState(() => window.innerWidth || 1200);
   const [qrRows, setQrRows] = useState(() => {
     try { return JSON.parse(localStorage.getItem(QR_STORAGE_KEY)) || []; } catch { return []; }
   });
+  const [transfers, setTransfers] = useState(() => {
+    try { return JSON.parse(localStorage.getItem(TRANSFER_STORAGE_KEY)) || []; } catch { return []; }
+  });
+  const [counts, setCounts] = useState(() => {
+    try { return JSON.parse(localStorage.getItem(COUNT_STORAGE_KEY)) || []; } catch { return []; }
+  });
+  const [transferForm, setTransferForm] = useState({ art: '', qty: '', from: '', to: '', note: '' });
+  const [countForm, setCountForm] = useState({ art: '', qty: '', position: '', note: '' });
   const [pendingQr, setPendingQr] = useState('');
+  const pendingQrRef = useRef('');
   const [manualQrValue, setManualQrValue] = useState('');
   const [scannerError, setScannerError] = useState('');
   const videoRef = useRef(null);
@@ -205,7 +232,21 @@ function App() {
   const trailerRef = useRef(null);
 
   useEffect(() => { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); }, [state]);
+  useEffect(() => { pendingQrRef.current = pendingQr; }, [pendingQr]);
   useEffect(() => { localStorage.setItem(QR_STORAGE_KEY, JSON.stringify(qrRows)); }, [qrRows]);
+  useEffect(() => { localStorage.setItem(TRANSFER_STORAGE_KEY, JSON.stringify(transfers)); }, [transfers]);
+  useEffect(() => { localStorage.setItem(COUNT_STORAGE_KEY, JSON.stringify(counts)); }, [counts]);
+  useEffect(() => {
+    const quoteTimer = setInterval(() => setQuoteIndex(i => (i + 1) % APP_QUOTES.length), 5 * 60 * 1000);
+    const clockTimer = setInterval(() => setNow(new Date()), 60 * 1000);
+    return () => { clearInterval(quoteTimer); clearInterval(clockTimer); };
+  }, []);
+  useEffect(() => {
+    const onResize = () => setViewportWidth(window.innerWidth || 1200);
+    window.addEventListener('resize', onResize);
+    return () => window.removeEventListener('resize', onResize);
+  }, []);
+
 
   useEffect(() => {
     const hash = window.location.hash || '';
@@ -217,7 +258,7 @@ function App() {
   useEffect(() => {
     let cancelled = false;
     async function startQrScanner() {
-      if (!qrMode || pendingQr) return;
+      if (!qrMode) return;
       if (!navigator.mediaDevices?.getUserMedia) {
         setScannerError('Kamera nije dostupna u ovom browseru. Možeš ručno upisati broj boksa.');
         return;
@@ -240,7 +281,8 @@ function App() {
         }
         const detector = new window.BarcodeDetector({ formats: ['qr_code'] });
         const scan = async () => {
-          if (cancelled || !videoRef.current || pendingQr) return;
+          if (cancelled || !videoRef.current) return;
+          if (pendingQrRef.current) { scanLoopRef.current = requestAnimationFrame(scan); return; }
           try {
             const codes = await detector.detect(videoRef.current);
             const value = codes?.[0]?.rawValue?.trim();
@@ -263,7 +305,7 @@ function App() {
       streamRef.current?.getTracks()?.forEach(track => track.stop());
       streamRef.current = null;
     };
-  }, [qrMode, pendingQr]);
+  }, [qrMode]);
 
   useEffect(() => {
     if (selectedBoxId && !state.boxes.some(b => b.id === selectedBoxId && !b.placed)) {
@@ -312,7 +354,7 @@ function App() {
   }
   function pointerPos(e) {
     const rect = trailerRef.current.getBoundingClientRect();
-    return { x: (e.clientX - rect.left) / PX_PER_METER, y: (e.clientY - rect.top) / PX_PER_METER };
+    return { x: (e.clientX - rect.left) / pxPerMeter, y: (e.clientY - rect.top) / pxPerMeter };
   }
   function startDrag(e, box) {
     if (mode !== 'drag') return;
@@ -489,45 +531,133 @@ Pozdrav`);
     window.location.href = `mailto:${MARIJA_EMAIL}?subject=${subject}&body=${body}`;
   }
 
-  const trailerStyle = { width: mToPx(state.trailer.length), height: Math.max(mToPx(state.trailer.width), 210) };
+  function openModule(view) {
+    setAppView(view);
+    setQrMode(view === 'scan');
+    setPendingQr('');
+    setShowInstructions(false);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }
 
-  return <main className="app" onPointerMove={onPointerMove} onPointerUp={onPointerUp}>
-    <header className="header">
-      <div>
-        <div className="brand-strip">
+  function getWorkTimeInfo(date = now) {
+    const start = new Date(date);
+    start.setHours(7, 0, 0, 0);
+    const end = new Date(date);
+    end.setHours(15, 0, 0, 0);
+    let target = end;
+    let label = 'Do kraja smene ostalo je';
+    let done = false;
+    if (date < start) {
+      target = start;
+      label = 'Do početka smene ostalo je';
+    } else if (date >= end) {
+      done = true;
+    }
+    if (done) return { status: 'Smena je završena.', hours: 0, minutes: 0, label: 'Radno vreme 07:00–15:00' };
+    const diff = Math.max(0, target - date);
+    const hours = Math.floor(diff / 36e5);
+    const minutes = Math.floor((diff % 36e5) / 60000);
+    return { label, hours, minutes, status: `${hours}h ${minutes}min` };
+  }
+
+  function saveTransferRecord() {
+    if (!transferForm.art.trim() && !transferForm.qty.trim()) return;
+    const record = { id: crypto.randomUUID(), createdAt: new Date().toISOString(), ...transferForm };
+    setTransfers(rows => [record, ...rows]);
+    setTransferForm({ art: '', qty: '', from: '', to: '', note: '' });
+  }
+
+  function saveCountRecord() {
+    if (!countForm.art.trim() && !countForm.qty.trim()) return;
+    const record = { id: crypto.randomUUID(), createdAt: new Date().toISOString(), ...countForm };
+    setCounts(rows => [record, ...rows]);
+    setCountForm({ art: '', qty: '', position: '', note: '' });
+  }
+
+  function moduleTitle() {
+    return {
+      load: 'Utovar prikolice',
+      scan: 'Skeniranje boksova',
+      transfer: 'Dopuna materijala',
+      count: 'Brojanje materijala',
+      history: 'Istorija',
+      time: 'Vreme'
+    }[appView] || 'Verano Logistics';
+  }
+
+  function instructionContent() {
+    if (appView === 'scan') return <div className="instructions-grid">
+      <div><h3>1. Skeniraj boks</h3><p>Usmeri kameru ka QR kodu boksa. Ako kamera ne očita, broj boksa možeš upisati ručno.</p></div>
+      <div><h3>2. Izaberi tip robe</h3><p>Nakon skeniranja izaberi Roletne, Tende, Žaluzine ili Extra Transfer. Palete nisu u izboru jer nemaju QR kodove.</p></div>
+      <div><h3>3. Dopuni opis</h3><p>U tabeli možeš ručno dopisati opis ili napomenu za svaki boks.</p></div>
+      <div><h3>4. Pošalji Mariji</h3><p>Dugme otvara mail aplikaciju sa tabelom u tekstu poruke. Ti samo proveriš i klikneš Send.</p></div>
+    </div>;
+    if (appView === 'transfer') return <div className="instructions-grid"><div><h3>Dopuna materijala</h3><p>Unesi ART/ID, količinu, poziciju sa koje je uzeto i poziciju na koju je preneto. Sačuvani red ostaje u lokalnoj istoriji uređaja.</p></div></div>;
+    if (appView === 'count') return <div className="instructions-grid"><div><h3>Brojanje materijala</h3><p>Unesi ART/ID, količinu i poziciju. Koristi se za brzu lokalnu evidenciju stanja.</p></div></div>;
+    return <div className="instructions-grid">
+      <div><h3>1. Izaberi način rada</h3><p><b>Drag</b> služi za ručno pomeranje robe. <b>Grid</b> dodaje robu u jednu od tri trake prikolice.</p></div>
+      <div><h3>2. Menjanje robe</h3><p>U panelu „Tipovi robe“ možeš promeniti naziv, dimenzije, količinu i boju.</p></div>
+      <div><h3>3. Prikolica</h3><p>Na telefonu je prikolica umanjena da se lakše koristi. Ako roba ne staje, prikazuje se upozorenje.</p></div>
+      <div><h3>4. Čuvanje</h3><p>Sačuvaj prikolicu, upiši vozača, težine i dodaj slike po potrebi.</p></div>
+    </div>;
+  }
+
+
+  const isMobile = viewportWidth <= 768;
+  const pxPerMeter = isMobile ? Math.max(28, Math.min(46, (viewportWidth - 44) / Math.max(state.trailer.length, 1))) : PX_PER_METER;
+  const toPx = (m) => m * pxPerMeter;
+  const trailerHeight = isMobile ? Math.max(toPx(state.trailer.width), 78) : Math.max(toPx(state.trailer.width), 210);
+  const trailerStyle = { width: toPx(state.trailer.length), height: trailerHeight };
+  const workInfo = getWorkTimeInfo();
+
+  const ModuleHeader = ({ children }) => <header className="module-header">
+    <button className="back-home" onClick={() => openModule('home')}><ArrowLeft size={17}/> Početna</button>
+    <h1>{moduleTitle()}</h1>
+    <div className="module-actions">
+      {children}
+      <button className="ghost" onClick={() => setShowInstructions(true)}>Uputstvo</button>
+    </div>
+  </header>;
+
+  return <main className={`app app-${appView}`} onPointerMove={onPointerMove} onPointerUp={onPointerUp}>
+    {appView === 'home' && <section className="home-screen">
+      <div className="home-logo">
+        <div className="brand-strip home-brand">
           <img src="/popovic.jpg" alt="Popović logo" />
           <X size={22} className="collab-x" />
           <img src="/verano.jpg" alt="Verano logo" />
         </div>
-        <h1>Truck Loading Simulator</h1>
+        <h1>Verano Logistics</h1>
       </div>
-      <div className="header-actions">
-        <button className={qrMode ? 'ghost active-view' : 'ghost'} onClick={() => setQrMode(v => !v)}>{qrMode ? <><ArrowLeft size={16}/> Simulator</> : <><ClipboardList size={16}/> QR tabela</>}</button>
-        <button className="ghost" onClick={() => setShowInstructions(true)}>Uputstvo</button>
-        <div className={validation.valid ? 'status ok' : 'status bad'}>{validation.valid ? 'Sve staje' : 'NEMA MESTA'}</div>
+
+      <div className="home-grid">
+        <button className="home-tile" onClick={() => openModule('load')}><span className="tile-icon">🚚</span><b>UTOVAR</b></button>
+        <button className="home-tile" onClick={() => openModule('scan')}><span className="tile-icon">📦</span><b>SKENIRANJE</b></button>
+        <button className="home-tile" onClick={() => openModule('transfer')}><span className="tile-icon">🔄</span><b>DOPUNA</b></button>
+        <button className="home-tile" onClick={() => openModule('count')}><span className="tile-icon">🔢</span><b>BROJANJE</b></button>
+        <button className="home-tile" onClick={() => openModule('history')}><span className="tile-icon">📖</span><b>ISTORIJA</b></button>
+        <button className="home-tile" onClick={() => openModule('time')}><span className="tile-icon">⏰</span><b>VREME</b></button>
       </div>
-    </header>
+
+      <div className="quote-card">
+        <span>Citati</span>
+        <p>“{APP_QUOTES[quoteIndex]}”</p>
+      </div>
+    </section>}
 
     {showInstructions && <div className="modal-backdrop" onClick={() => setShowInstructions(false)}>
       <div className="modal" onClick={e => e.stopPropagation()}>
         <div className="modal-head">
-          <h2>Kako koristiti simulator</h2>
+          <h2>Uputstvo — {moduleTitle()}</h2>
           <button className="ghost" onClick={() => setShowInstructions(false)}><X size={16}/> Zatvori</button>
         </div>
-        <div className="instructions-grid">
-          <div><h3>1. Izaberi način rada</h3><p><b>Drag & Drop</b> služi za ručno pomeranje robe. Prevuci robu u prikolicu i magnetik će je poravnati uz ivice ili vertikalno ispod/iznad drugog komada.</p><p><b>Grid Click</b> je najbrži režim: izaberi robu, klikni jednu od 3 trake u prikolici i roba ide na sledeće slobodno mesto u toj traci.</p></div>
-          <div><h3>2. Menjanje robe</h3><p>U panelu „Tipovi robe“ možeš promeniti naziv, dužinu, širinu, količinu i boju. Količina povećava ili smanjuje broj dostupnih komada.</p></div>
-          <div><h3>3. Prikolica</h3><p>Možeš promeniti dužinu i širinu/dubinu prikolice. Ako roba ne staje, cela prikolica pocrveni i piše „NEMA MESTA“.</p></div>
-          <div><h3>4. Čuvanje i deljenje</h3><p>Klikni „Sačuvaj prikolicu“ da upišeš trenutni raspored u tabelu. U tabeli možeš dodati vozača, težinu prikolice, težinu tereta, slike, kopirati link ili otvoriti email sa linkom.</p></div>
-          <div><h3>5. Brisanje i reset</h3><p>„Isprazni prikolicu“ vraća svu robu u dostupne komade. „Resetuj sve“ vraća celu aplikaciju na početno stanje.</p></div>
-          <div><h3>6. QR tabela</h3><p>Gore desno klikni „QR tabela“. Skeniraj QR kod boksa, izaberi tip robe i red se automatski dodaje u tabelu. Opis možeš ručno dopisati. Dugme „Pošalji Mariji“ otvara Outlook/mail aplikaciju sa tabelom u tekstu poruke.</p></div>
-        </div>
+        {instructionContent()}
       </div>
     </div>}
 
     {sharedLoad && <section className="shared-view">
       <div className="shared-head">
-        <div><h2>Deljeni prikaz utovara</h2><p>Ovo je samo prikaz sačuvane prikolice. Bez direktnog pristupa tuđoj lokalnoj istoriji ili slikama.</p></div>
+        <div><h2>Deljeni prikaz utovara</h2><p>Ovo je samo prikaz sačuvane prikolice.</p></div>
         <button className="ghost" onClick={() => { window.location.hash = ''; setSharedLoad(null); }}><X size={16}/> Zatvori prikaz</button>
       </div>
       <div className="shared-card">
@@ -542,163 +672,132 @@ Pozdrav`);
       </div>
     </section>}
 
-    {qrMode && <section className="qr-module">
-      <div className="qr-top">
-        <div className="qr-scanner-card">
-          <div className="qr-scanner-head">
-            <div><h2>QR skeniranje boksova</h2><p>Skeniraj QR kod, zatim izaberi tip robe. Paleta nije u izboru jer nema QR kod.</p></div>
-            <span className="qr-count">{qrRows.length} redova</span>
-          </div>
-          {!pendingQr ? <>
-            <div className="camera-box">
-              <video ref={videoRef} muted playsInline />
-              <div className="scan-frame"><Camera size={26}/><span>Usmeri kameru ka QR kodu</span></div>
-            </div>
-            {scannerError && <div className="scanner-error">{scannerError}</div>}
-            <div className="manual-scan">
-              <input value={manualQrValue} onChange={e => setManualQrValue(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') addManualQr(); }} placeholder="Ručno unesi broj boksa ako kamera ne očita" />
-              <button onClick={addManualQr}>Dodaj broj</button>
-            </div>
-          </> : <div className="type-picker">
-            <h3>Skeniran boks: <span>{pendingQr}</span></h3>
-            <p>Izaberi tip robe za ovaj boks:</p>
-            <div className="type-picker-buttons">
-              {QR_PRODUCT_TYPES.map(type => <button key={type} onClick={() => confirmQrType(type)}>{type}</button>)}
-            </div>
-            <button className="ghost" onClick={() => setPendingQr('')}>Poništi skeniranje</button>
-          </div>}
-        </div>
-      </div>
+    {appView === 'load' && <>
+      <ModuleHeader><div className={validation.valid ? 'status ok' : 'status bad'}>{validation.valid ? 'Sve staje' : 'NEMA MESTA'}</div></ModuleHeader>
+      <section className="metrics">
+        <label>Dužina prikolice <input type="number" step="0.1" value={state.trailer.length} onChange={e => updateTrailer('length', e.target.value)} /> m</label>
+        <label>Širina / dubina prikolice <input type="number" step="0.05" value={state.trailer.width} onChange={e => updateTrailer('width', e.target.value)} /> m</label>
+        <div><b>{placed.length}</b> placed / <b>{unplaced.length}</b> unplaced</div>
+        <div><b>{validation.usedArea.toFixed(2)}m²</b> used / {validation.trailerArea.toFixed(2)}m²</div>
+        <div><b>{Math.round((validation.usedArea / validation.trailerArea) * 100) || 0}%</b> area used</div>
+      </section>
 
-      <div className="qr-table-section">
-        <div className="qr-table-title">
-          <div><h2>Excel tabela za kancelariju</h2><p>Opis možeš ručno dopisati. Dugme „Pošalji Mariji“ otvara email sa tabelom u telu poruke.</p></div>
-          <div className="qr-actions">
-            <button onClick={emailMarija} disabled={!qrRows.length}><Send size={15}/> Pošalji Mariji</button>
-            <button className="ghost" onClick={copyQrTable} disabled={!qrRows.length}><Copy size={15}/> Kopiraj tabelu</button>
-            <button className="ghost" onClick={() => downloadQrCsv(qrRows)} disabled={!qrRows.length}><FileSpreadsheet size={15}/> Export CSV</button>
-            <button className="danger" onClick={() => { if (confirm('Obrisati celu QR tabelu?')) setQrRows([]); }} disabled={!qrRows.length}><Trash2 size={15}/> Obriši tabelu</button>
-          </div>
+      <section className="mode-panel compact small-mode-panel">
+        <h2>Način pakovanja</h2>
+        <div className="segmented-switch">
+          <button className={mode === 'drag' ? 'active' : ''} onClick={() => setMode('drag')}><MousePointer2 size={14}/> Drag</button>
+          <button className={mode === 'grid' ? 'active' : ''} onClick={() => setMode('grid')}><Grid3X3 size={14}/> Grid</button>
         </div>
-        <div className="qr-table-wrap">
-          <table className="qr-table">
-            <thead><tr><th>#</th><th>Broj boksa</th><th>Tip robe</th><th>Opis</th><th></th></tr></thead>
+      </section>
+
+      <section className="workspace">
+        <section className="main-area">
+          <div className="trailer-wrap compact-trailer-wrap">
+            <div className="dim dim-top">{state.trailer.length} m</div>
+            <div className={`trailer ${validation.valid ? '' : 'bad-trailer'}`} ref={trailerRef} style={trailerStyle} onPointerDown={placeSelectedAt}>
+              {!validation.valid && <div className="no-space-banner">NEMA MESTA</div>}
+              <div className="dim dim-side">{state.trailer.width} m</div>
+              <div className="lane-line lane-line-1"></div>
+              <div className="lane-line lane-line-2"></div>
+              {placed.map(b => {
+                const invalid = validation.invalidIds.has(b.id);
+                const w = toPx(b.rotated ? b.width : b.length);
+                const h = toPx(b.rotated ? b.length : b.width);
+                return <div key={b.id} onPointerDown={e => startDrag(e, b)} className={`box placed ${invalid ? 'invalid' : ''}`} style={{ left: toPx(b.x), top: toPx(b.y), width: w, height: h, background: b.color }}>
+                  <strong>{b.name}</strong><span>{formatMeters(b.rotated ? b.width : b.length)} × {formatMeters(b.rotated ? b.length : b.width)}</span>
+                  <div className="box-actions"><button onClick={(e)=>{e.stopPropagation(); rotateBox(b.id)}}><RotateCw size={13}/></button><button onClick={(e)=>{e.stopPropagation(); unplaceBox(b.id)}}><Trash2 size={13}/></button></div>
+                </div>;
+              })}
+            </div>
+          </div>
+          <div className="actions">
+            <button onClick={saveCurrentLoad}><Save size={16}/> Sačuvaj prikolicu</button>
+            <button onClick={clearTrailer}><RotateCcw size={16}/> Isprazni prikolicu</button>
+            <button className="danger" onClick={resetAll}><Trash2 size={16}/> Resetuj sve</button>
+            <span><Save size={15}/> Automatski sačuvano lokalno</span>
+          </div>
+          <h2>Dostupna roba</h2>
+          <div className="available compact-available">
+            {unplaced.map(b => <div key={b.id} onPointerDown={e => mode === 'drag' ? startDrag(e, b) : selectForGrid(b)} className={`box preview ${selectedBoxId === b.id ? 'selected-box' : ''}`} style={{ background: b.color }}><strong>{b.name}</strong><span>{formatMeters(b.length)} × {formatMeters(b.width)}</span>{mode === 'grid' && selectedBoxId === b.id && <em>Izabran</em>}</div>)}
+          </div>
+        </section>
+
+        <aside className="panel types-panel">
+          <div className="panel-title"><h2>Tipovi robe</h2><button onClick={addType}><Plus size={16}/> Dodaj</button></div>
+          {state.cargoTypes.map(t => <div className="type-card" key={t.id}>
+            <input value={t.name} onChange={e => updateType(t.id, { name: e.target.value })}/>
+            <div className="row"><label>Dužina (m) <input type="number" step="0.1" value={t.length} onChange={e => updateType(t.id, { length: e.target.value })}/></label><label>Širina (m) <input type="number" step="0.1" value={t.width} onChange={e => updateType(t.id, { width: e.target.value })}/></label></div>
+            <div className="row"><label>Količina <input type="number" min="0" value={t.qty} onChange={e => updateType(t.id, { qty: e.target.value })}/></label><label>Boja <input type="color" value={t.color} onChange={e => updateType(t.id, { color: e.target.value })}/></label></div>
+            <button className="ghost danger" onClick={() => deleteType(t.id)}><Trash2 size={14}/> Obriši tip</button>
+          </div>)}
+        </aside>
+      </section>
+
+      <section className="saved-section">
+        <div className="saved-title"><h2>Sačuvane prikolice</h2></div>
+        <div className="saved-table-wrap">
+          <table className="saved-table">
+            <thead><tr><th>Prikaz</th><th>Datum i vreme</th><th>Ime vozača</th><th>Težina prikolice</th><th>Težina tereta</th><th>Slike</th><th>Status</th><th>Share</th><th></th></tr></thead>
             <tbody>
-              {!qrRows.length && <tr><td colSpan="5" className="empty-row">Još nema skeniranih boksova.</td></tr>}
-              {qrRows.map((row, index) => <tr key={row.id}>
-                <td>{index + 1}</td>
-                <td><input value={row.boxNumber} onChange={e => updateQrRow(row.id, { boxNumber: e.target.value })}/></td>
-                <td><select value={row.productType} onChange={e => updateQrRow(row.id, { productType: e.target.value })}>{QR_PRODUCT_TYPES.map(type => <option key={type} value={type}>{type}</option>)}</select></td>
-                <td><input value={row.description} onChange={e => updateQrRow(row.id, { description: e.target.value })} placeholder="Opis / napomena" /></td>
-                <td><button className="icon-danger" onClick={() => deleteQrRow(row.id)}><Trash2 size={15}/></button></td>
+              {(state.savedLoads || []).length === 0 && <tr><td colSpan="9" className="empty-row">Još nema sačuvanih prikolica.</td></tr>}
+              {(state.savedLoads || []).map(load => <tr key={load.id}>
+                <td><img className="thumb" src={load.thumbnail} alt="Sačuvan raspored prikolice" /></td>
+                <td>{formatDateTime(load.createdAt)}</td>
+                <td><input placeholder="Ime vozača" value={load.driverName} onChange={e => updateSavedLoad(load.id, { driverName: e.target.value })}/></td>
+                <td><input placeholder="npr. 7200 kg" value={load.trailerWeight} onChange={e => updateSavedLoad(load.id, { trailerWeight: e.target.value })}/></td>
+                <td><input placeholder="npr. 18000 kg" value={load.cargoWeight} onChange={e => updateSavedLoad(load.id, { cargoWeight: e.target.value })}/></td>
+                <td><label className="upload-btn"><Upload size={14}/> Dodaj slike<input type="file" accept="image/*" multiple onChange={e => uploadSavedPhotos(load.id, e.target.files)} /></label><div className="photo-strip">{(load.photos || []).map(photo => <span key={photo.id} className="photo-mini"><img src={photo.dataUrl} alt={photo.name}/><button onClick={() => removeSavedPhoto(load.id, photo.id)}>×</button></span>)}</div></td>
+                <td><span className={load.valid ? 'mini-status ok' : 'mini-status bad'}>{load.valid ? 'OK' : 'Nema mesta'}</span></td>
+                <td className="share-actions"><button onClick={() => copyShareLink(load)}><Copy size={15}/> Link</button><button onClick={() => emailShare(load)}><Mail size={15}/> Email</button></td>
+                <td className="saved-actions"><button onClick={() => loadSavedLoad(load)}><Edit3 size={15}/> Učitaj</button><button className="icon-danger" onClick={() => deleteSavedLoad(load.id)}><Trash2 size={15}/></button></td>
               </tr>)}
             </tbody>
           </table>
         </div>
-      </div>
-    </section>}
+      </section>
+    </>}
 
-    {!qrMode && <>
-    <section className="metrics">
-      <label>Dužina prikolice <input type="number" step="0.1" value={state.trailer.length} onChange={e => updateTrailer('length', e.target.value)} /> m</label>
-      <label>Širina / dubina prikolice <input type="number" step="0.05" value={state.trailer.width} onChange={e => updateTrailer('width', e.target.value)} /> m</label>
-      <div><b>{placed.length}</b> placed / <b>{unplaced.length}</b> unplaced</div>
-      <div><b>{validation.usedArea.toFixed(2)}m²</b> used / {validation.trailerArea.toFixed(2)}m²</div>
-      <div><b>{Math.round((validation.usedArea / validation.trailerArea) * 100) || 0}%</b> area used</div>
-    </section>
-
-    <section className="mode-panel compact">
-      <h2>Način pakovanja</h2>
-      <div className="mode-buttons">
-        <button className={mode === 'drag' ? 'mode-btn active' : 'mode-btn'} onClick={() => setMode('drag')}><MousePointer2 size={16}/> Drag & Drop</button>
-        <button className={mode === 'grid' ? 'mode-btn active' : 'mode-btn'} onClick={() => setMode('grid')}><Grid3X3 size={16}/> Grid Click</button>
-      </div>
-    </section>
-
-    <section className="workspace">
-      <aside className="panel">
-        <div className="panel-title"><h2>Tipovi robe</h2><button onClick={addType}><Plus size={16}/> Dodaj</button></div>
-        {state.cargoTypes.map(t => <div className="type-card" key={t.id}>
-          <input value={t.name} onChange={e => updateType(t.id, { name: e.target.value })}/>
-          <div className="row"><label>Dužina (m) <input type="number" step="0.1" value={t.length} onChange={e => updateType(t.id, { length: e.target.value })}/></label><label>Širina (m) <input type="number" step="0.1" value={t.width} onChange={e => updateType(t.id, { width: e.target.value })}/></label></div>
-          <div className="row"><label>Količina <input type="number" min="0" value={t.qty} onChange={e => updateType(t.id, { qty: e.target.value })}/></label><label>Boja <input type="color" value={t.color} onChange={e => updateType(t.id, { color: e.target.value })}/></label></div>
-          <button className="ghost danger" onClick={() => deleteType(t.id)}><Trash2 size={14}/> Obriši tip</button>
-        </div>)}
-      </aside>
-
-      <section className="main-area">
-        <div className="trailer-wrap">
-          <div className="dim dim-top">{state.trailer.length} m</div>
-          <div className={`trailer ${validation.valid ? '' : 'bad-trailer'}`} ref={trailerRef} style={trailerStyle} onPointerDown={placeSelectedAt}>
-            {!validation.valid && <div className="no-space-banner">NEMA MESTA</div>}
-            <div className="dim dim-side">{state.trailer.width} m</div>
-            <div className="lane-line lane-line-1"></div>
-            <div className="lane-line lane-line-2"></div>
-            {placed.map(b => {
-              const invalid = validation.invalidIds.has(b.id);
-              const w = mToPx(b.rotated ? b.width : b.length);
-              const h = mToPx(b.rotated ? b.length : b.width);
-              return <div key={b.id} onPointerDown={e => startDrag(e, b)} className={`box placed ${invalid ? 'invalid' : ''}`} style={{ left: mToPx(b.x), top: mToPx(b.y), width: w, height: h, background: b.color }}>
-                <strong>{b.name}</strong><span>{formatMeters(b.rotated ? b.width : b.length)} × {formatMeters(b.rotated ? b.length : b.width)}</span>
-                <div className="box-actions"><button onClick={(e)=>{e.stopPropagation(); rotateBox(b.id)}}><RotateCw size={13}/></button><button onClick={(e)=>{e.stopPropagation(); unplaceBox(b.id)}}><Trash2 size={13}/></button></div>
-              </div>;
-            })}
+    {appView === 'scan' && <>
+      <ModuleHeader />
+      <section className="qr-module">
+        <div className="qr-top">
+          <div className="qr-scanner-card">
+            <div className="qr-scanner-head"><h2><QrCode size={22}/> Skeniranje boksova</h2><span className="qr-count">{qrRows.length} redova</span></div>
+            {!pendingQr ? <>
+              <div className="camera-box"><video ref={videoRef} muted playsInline /><div className="scan-frame"><Camera size={30}/><span>Usmeri kameru ka QR kodu</span></div></div>
+              {scannerError && <div className="scanner-error">{scannerError}</div>}
+              <div className="manual-scan"><input value={manualQrValue} onChange={e => setManualQrValue(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') addManualQr(); }} placeholder="Ručno unesi broj boksa" /><button onClick={addManualQr}>Dodaj broj</button></div>
+            </> : <div className="type-picker"><h3>Boks: <span>{pendingQr}</span></h3><div className="type-picker-buttons">{QR_PRODUCT_TYPES.map(type => <button key={type} onClick={() => confirmQrType(type)}>{type}</button>)}</div><button className="ghost" onClick={() => setPendingQr('')}>Poništi</button></div>}
           </div>
         </div>
-        <div className="actions">
-          <button onClick={saveCurrentLoad}><Save size={16}/> Sačuvaj prikolicu</button>
-          <button onClick={clearTrailer}><RotateCcw size={16}/> Isprazni prikolicu</button>
-          <button className="danger" onClick={resetAll}><Trash2 size={16}/> Resetuj sve</button>
-          <span><Save size={15}/> Automatski sačuvano lokalno</span>
-        </div>
-        <h2>Dostupna roba</h2>
-        <div className="available">
-          {unplaced.map(b => <div key={b.id} onPointerDown={e => mode === 'drag' ? startDrag(e, b) : selectForGrid(b)} className={`box preview ${selectedBoxId === b.id ? 'selected-box' : ''}`} style={{ background: b.color }}><strong>{b.name}</strong><span>{formatMeters(b.length)} × {formatMeters(b.width)}</span>{mode === 'grid' && selectedBoxId === b.id && <em>Izabran</em>}</div>)}
+        <div className="qr-table-section">
+          <div className="qr-table-title"><h2>Excel tabela</h2><div className="qr-actions"><button onClick={emailMarija} disabled={!qrRows.length}><Send size={15}/> Pošalji Mariji</button><button className="ghost" onClick={copyQrTable} disabled={!qrRows.length}><Copy size={15}/> Kopiraj</button><button className="ghost" onClick={() => downloadQrCsv(qrRows)} disabled={!qrRows.length}><FileSpreadsheet size={15}/> CSV</button><button className="danger" onClick={() => { if (confirm('Obrisati celu QR tabelu?')) setQrRows([]); }} disabled={!qrRows.length}><Trash2 size={15}/> Obriši</button></div></div>
+          <div className="qr-table-wrap"><table className="qr-table"><thead><tr><th>#</th><th>Broj boksa</th><th>Tip robe</th><th>Opis</th><th></th></tr></thead><tbody>{!qrRows.length && <tr><td colSpan="5" className="empty-row">Još nema skeniranih boksova.</td></tr>}{qrRows.map((row, index) => <tr key={row.id}><td>{index + 1}</td><td><input value={row.boxNumber} onChange={e => updateQrRow(row.id, { boxNumber: e.target.value })}/></td><td><select value={row.productType} onChange={e => updateQrRow(row.id, { productType: e.target.value })}>{QR_PRODUCT_TYPES.map(type => <option key={type} value={type}>{type}</option>)}</select></td><td><input value={row.description} onChange={e => updateQrRow(row.id, { description: e.target.value })} placeholder="Opis" /></td><td><button className="icon-danger" onClick={() => deleteQrRow(row.id)}><Trash2 size={15}/></button></td></tr>)}</tbody></table></div>
         </div>
       </section>
-    </section>
+    </>}
 
-    <section className="saved-section">
-      <div className="saved-title">
-        <h2>Sačuvane prikolice</h2>
-      </div>
-      <div className="saved-table-wrap">
-        <table className="saved-table">
-          <thead>
-            <tr>
-              <th>Prikaz</th>
-              <th>Datum i vreme</th>
-              <th>Ime vozača</th>
-              <th>Težina prikolice</th>
-              <th>Težina tereta</th>
-              <th>Slike</th>
-              <th>Status</th>
-              <th>Share</th>
-              <th></th>
-            </tr>
-          </thead>
-          <tbody>
-            {(state.savedLoads || []).length === 0 && <tr><td colSpan="9" className="empty-row">Još nema sačuvanih prikolica.</td></tr>}
-            {(state.savedLoads || []).map(load => <tr key={load.id}>
-              <td><img className="thumb" src={load.thumbnail} alt="Sačuvan raspored prikolice" /></td>
-              <td>{formatDateTime(load.createdAt)}</td>
-              <td><input placeholder="Ime vozača" value={load.driverName} onChange={e => updateSavedLoad(load.id, { driverName: e.target.value })}/></td>
-              <td><input placeholder="npr. 7200 kg" value={load.trailerWeight} onChange={e => updateSavedLoad(load.id, { trailerWeight: e.target.value })}/></td>
-              <td><input placeholder="npr. 18000 kg" value={load.cargoWeight} onChange={e => updateSavedLoad(load.id, { cargoWeight: e.target.value })}/></td>
-              <td>
-                <label className="upload-btn"><Upload size={14}/> Dodaj slike<input type="file" accept="image/*" multiple onChange={e => uploadSavedPhotos(load.id, e.target.files)} /></label>
-                <div className="photo-strip">{(load.photos || []).map(photo => <span key={photo.id} className="photo-mini"><img src={photo.dataUrl} alt={photo.name}/><button onClick={() => removeSavedPhoto(load.id, photo.id)}>×</button></span>)}</div>
-              </td>
-              <td><span className={load.valid ? 'mini-status ok' : 'mini-status bad'}>{load.valid ? 'OK' : 'Nema mesta'}</span></td>
-              <td className="share-actions"><button onClick={() => copyShareLink(load)}><Copy size={15}/> Link</button><button onClick={() => emailShare(load)}><Mail size={15}/> Email</button></td>
-              <td className="saved-actions"><button onClick={() => loadSavedLoad(load)}><Edit3 size={15}/> Učitaj</button><button className="icon-danger" onClick={() => deleteSavedLoad(load.id)}><Trash2 size={15}/></button></td>
-            </tr>)}
-          </tbody>
-        </table>
-      </div>
-    </section>
+    {appView === 'transfer' && <>
+      <ModuleHeader />
+      <section className="simple-module"><h2>Dopuna materijala</h2><div className="form-grid"><input placeholder="ART / ID" value={transferForm.art} onChange={e => setTransferForm(f => ({...f, art:e.target.value}))}/><input placeholder="Količina" value={transferForm.qty} onChange={e => setTransferForm(f => ({...f, qty:e.target.value}))}/><input placeholder="Pozicija odakle" value={transferForm.from} onChange={e => setTransferForm(f => ({...f, from:e.target.value}))}/><input placeholder="Pozicija gde" value={transferForm.to} onChange={e => setTransferForm(f => ({...f, to:e.target.value}))}/><input className="wide" placeholder="Opis / napomena" value={transferForm.note} onChange={e => setTransferForm(f => ({...f, note:e.target.value}))}/><button onClick={saveTransferRecord}><Save size={16}/> Sačuvaj dopunu</button></div><div className="record-list">{transfers.length===0 && <p className="empty-card">Još nema dopuna.</p>}{transfers.map(r => <div className="record-card" key={r.id}><b>{r.art || '-'}</b><span>{r.qty || '-'} kom</span><span>{r.from || '-'} → {r.to || '-'}</span><small>{formatDateTime(r.createdAt)}</small><p>{r.note}</p></div>)}</div></section>
+    </>}
+
+    {appView === 'count' && <>
+      <ModuleHeader />
+      <section className="simple-module"><h2>Brojanje materijala</h2><div className="form-grid"><input placeholder="ART / ID" value={countForm.art} onChange={e => setCountForm(f => ({...f, art:e.target.value}))}/><input placeholder="Količina" value={countForm.qty} onChange={e => setCountForm(f => ({...f, qty:e.target.value}))}/><input placeholder="Pozicija" value={countForm.position} onChange={e => setCountForm(f => ({...f, position:e.target.value}))}/><input className="wide" placeholder="Opis / napomena" value={countForm.note} onChange={e => setCountForm(f => ({...f, note:e.target.value}))}/><button onClick={saveCountRecord}><Save size={16}/> Sačuvaj brojanje</button></div><div className="record-list">{counts.length===0 && <p className="empty-card">Još nema brojanja.</p>}{counts.map(r => <div className="record-card" key={r.id}><b>{r.art || '-'}</b><span>{r.qty || '-'} kom</span><span>Pozicija: {r.position || '-'}</span><small>{formatDateTime(r.createdAt)}</small><p>{r.note}</p></div>)}</div></section>
+    </>}
+
+    {appView === 'history' && <>
+      <ModuleHeader />
+      <section className="simple-module"><h2>Istorija</h2><div className="history-grid"><div><h3>Prikolice</h3><p>{(state.savedLoads || []).length} sačuvanih prikolica</p></div><div><h3>Boksovi</h3><p>{qrRows.length} skeniranih boksova</p></div><div><h3>Dopune</h3><p>{transfers.length} zapisa</p></div><div><h3>Brojanje</h3><p>{counts.length} zapisa</p></div></div></section>
+    </>}
+
+    {appView === 'time' && <>
+      <ModuleHeader />
+      <section className="time-screen"><div className="time-card"><Clock3 size={64}/><h2>{now.toLocaleTimeString('sr-RS', { hour: '2-digit', minute: '2-digit' })}</h2><p>Radno vreme: 07:00–15:00</p><strong>{workInfo.label}</strong><div className="time-left">{workInfo.status}</div></div></section>
     </>}
   </main>;
+
 }
 
 createRoot(document.getElementById('root')).render(<App />);
