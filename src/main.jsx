@@ -5,7 +5,9 @@ import './styles.css';
 
 const STORAGE_KEY = 'truck-loading-simulator-v8';
 const PX_PER_METER = 76;
-const MARIJA_EMAIL = 'ilija.ilkic@hotmail.co.uk'; // OVDE upiši Marijin email
+const MARIJA_EMAIL = 'ilija.ilkic@hotmail.co.uk'; // OVDE upiši Marijin email za scanning listu
+const TRANSFER_EMAIL = 'ilija.ilkic@hotmail.co.uk'; // OVDE upiši email za dopunu materijala
+const APP_LOGO_SRC = '/logo.png'; // OVDE promeni putanju za logo/ikonicu aplikacije
 const QR_STORAGE_KEY = 'truck-loading-simulator-qr-table-v1';
 const QR_PRODUCT_TYPES = ['Roletne', 'Tende', 'Žaluzine', 'Extra Transfer'];
 const TRANSFER_STORAGE_KEY = 'verano-transfer-records-v1';
@@ -20,7 +22,9 @@ const APP_QUOTES = [
   'Ajde ti, nije mi nidočega.',
   'Sveta je bio na ostrvu!.',
   'Kaži 8.',
-  'Si pregledao boks? Jesam (zna da nije).'
+  'Yo1',
+  'Ide Sveta oko tebe, pazi da te ne ogrebe',
+  'Jova je najbolji, najpametniji i najjači radnik u Veranu. Hvala ti Jovo!'
 ];
 
 const DEFAULT_STATE = {
@@ -174,6 +178,146 @@ function formatQrRowsForEmail(rows) {
   const header = '#	Broj boksa	Tip robe	Opis';
   const lines = rows.map((row, index) => `${index + 1}	${row.boxNumber}	${row.productType}	${row.description || '-'}`);
   return [header, ...lines].join('\n');
+}
+
+function pad2(value) { return String(value).padStart(2, '0'); }
+function todayIsoDate() {
+  const d = new Date();
+  return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
+}
+function todaySrDate() {
+  return new Date().toLocaleDateString('sr-RS');
+}
+function escapeSheetXml(value) {
+  return String(value ?? '').replace(/[<>&'\"]/g, c => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;', "'": '&apos;', '"': '&quot;' }[c]));
+}
+function columnName(index) {
+  let name = '';
+  let n = index + 1;
+  while (n > 0) {
+    const rem = (n - 1) % 26;
+    name = String.fromCharCode(65 + rem) + name;
+    n = Math.floor((n - 1) / 26);
+  }
+  return name;
+}
+function makeSheetXml(rows) {
+  const sheetRows = rows.map((row, rIdx) => {
+    const cells = row.map((value, cIdx) => {
+      const ref = `${columnName(cIdx)}${rIdx + 1}`;
+      return `<c r="${ref}" t="inlineStr"><is><t>${escapeSheetXml(value)}</t></is></c>`;
+    }).join('');
+    return `<row r="${rIdx + 1}">${cells}</row>`;
+  }).join('');
+  return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetData>${sheetRows}</sheetData></worksheet>`;
+}
+function crc32(str) {
+  let crc = -1;
+  for (let i = 0; i < str.length; i++) {
+    crc ^= str.charCodeAt(i);
+    for (let j = 0; j < 8; j++) crc = (crc >>> 1) ^ (0xedb88320 & -(crc & 1));
+  }
+  return (crc ^ -1) >>> 0;
+}
+function dosDateTime(date = new Date()) {
+  const time = (date.getHours() << 11) | (date.getMinutes() << 5) | Math.floor(date.getSeconds() / 2);
+  const dosDate = ((date.getFullYear() - 1980) << 9) | ((date.getMonth() + 1) << 5) | date.getDate();
+  return { time, dosDate };
+}
+function u16(n) { return [n & 255, (n >>> 8) & 255]; }
+function u32(n) { return [n & 255, (n >>> 8) & 255, (n >>> 16) & 255, (n >>> 24) & 255]; }
+function makeZip(files) {
+  const encoder = new TextEncoder();
+  const chunks = [];
+  const central = [];
+  let offset = 0;
+  const { time, dosDate } = dosDateTime();
+  files.forEach(file => {
+    const nameBytes = encoder.encode(file.name);
+    const dataBytes = encoder.encode(file.content);
+    let binary = '';
+    dataBytes.forEach(b => binary += String.fromCharCode(b));
+    const crc = crc32(binary);
+    const local = new Uint8Array([
+      ...u32(0x04034b50), ...u16(20), ...u16(0), ...u16(0), ...u16(time), ...u16(dosDate),
+      ...u32(crc), ...u32(dataBytes.length), ...u32(dataBytes.length), ...u16(nameBytes.length), ...u16(0)
+    ]);
+    chunks.push(local, nameBytes, dataBytes);
+    central.push({ nameBytes, crc, size: dataBytes.length, offset, time, dosDate });
+    offset += local.length + nameBytes.length + dataBytes.length;
+  });
+  const centralStart = offset;
+  central.forEach(c => {
+    const header = new Uint8Array([
+      ...u32(0x02014b50), ...u16(20), ...u16(20), ...u16(0), ...u16(0), ...u16(c.time), ...u16(c.dosDate),
+      ...u32(c.crc), ...u32(c.size), ...u32(c.size), ...u16(c.nameBytes.length), ...u16(0), ...u16(0),
+      ...u16(0), ...u16(0), ...u32(0), ...u32(c.offset)
+    ]);
+    chunks.push(header, c.nameBytes);
+    offset += header.length + c.nameBytes.length;
+  });
+  const centralSize = offset - centralStart;
+  const end = new Uint8Array([
+    ...u32(0x06054b50), ...u16(0), ...u16(0), ...u16(central.length), ...u16(central.length),
+    ...u32(centralSize), ...u32(centralStart), ...u16(0)
+  ]);
+  chunks.push(end);
+  return new Blob(chunks, { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+}
+function downloadXlsxFile(filename, sheetRows) {
+  const files = [
+    { name: '[Content_Types].xml', content: '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/><Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/></Types>' },
+    { name: '_rels/.rels', content: '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>' },
+    { name: 'xl/workbook.xml', content: '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets><sheet name="Scanning lista" sheetId="1" r:id="rId1"/></sheets></workbook>' },
+    { name: 'xl/_rels/workbook.xml.rels', content: '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/></Relationships>' },
+    { name: 'xl/worksheets/sheet1.xml', content: makeSheetXml(sheetRows) },
+  ];
+  const blob = makeZip(files);
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+function downloadScanningXlsx(rows) {
+  const dateIso = todayIsoDate();
+  const rowsForSheet = [
+    ['Scanning lista', '', '', ''],
+    ['Datum', todaySrDate(), '', ''],
+    [],
+    ['#', 'Broj boksa', 'Tip robe', 'Opis'],
+    ...rows.map((row, index) => [index + 1, row.boxNumber, row.productType, row.description || ''])
+  ];
+  downloadXlsxFile(`scanning-lista-${dateIso}.xlsx`, rowsForSheet);
+}
+
+function formatTransferRowsForEmail(rows) {
+  if (!rows.length) return 'Nema dodatih dopuna.';
+  return rows.map((row, index) => {
+    const lines = [
+      `${index + 1}. DOPUNA`,
+      `Art: ${row.art || '-'}`,
+      `Količina: ${row.qty || '-'}`,
+      `Bulk: ${row.from || '-'}`,
+      `Pick: ${row.to || '-'}`
+    ];
+    if (row.note) lines.push(`Napomena: ${row.note}`);
+    return lines.join('\n');
+  }).join('\n\n────────────────\n\n');
+}
+function downloadTransferXlsx(rows) {
+  const dateIso = todayIsoDate();
+  const rowsForSheet = [
+    ['Dopuna materijala', '', '', ''],
+    ['Datum', todaySrDate(), '', ''],
+    [],
+    ['#', 'Art', 'Količina', 'Bulk', 'Pick', 'Napomena'],
+    ...rows.map((row, index) => [index + 1, row.art || '', row.qty || '', row.from || '', row.to || '', row.note || ''])
+  ];
+  downloadXlsxFile(`dopuna-materijala-${dateIso}.xlsx`, rowsForSheet);
 }
 function downloadQrCsv(rows) {
   const header = ['#', 'Broj boksa', 'Tip robe', 'Opis'];
@@ -520,15 +664,49 @@ Težina tereta: ${load.cargoWeight || '-'}`);
     catch { window.prompt('Kopiraj tabelu:', table); }
   }
   function emailMarija() {
-    const subject = encodeURIComponent(`Tabela boksova - ${new Date().toLocaleDateString('sr-RS')}`);
+    if (!qrRows.length) return;
+    downloadScanningXlsx(qrRows);
+    const subject = encodeURIComponent(`Scanning lista - ${todaySrDate()}`);
     const body = encodeURIComponent(`Zdravo Marija,
 
-U nastavku je tabela skeniranih boksova:
+Skinuta je Excel scanning lista za ${todaySrDate()}.
+
+U prilogu treba dodati fajl: scanning-lista-${todayIsoDate()}.xlsx
+
+Pregled tabele:
 
 ${formatQrRowsForEmail(qrRows)}
 
 Pozdrav`);
     window.location.href = `mailto:${MARIJA_EMAIL}?subject=${subject}&body=${body}`;
+  }
+
+  function emailTransfer() {
+    if (!transfers.length) {
+      alert('Prvo dodaj bar jednu dopunu.');
+      return;
+    }
+    const subject = encodeURIComponent(`Dopuna materijala - ${todaySrDate()}`);
+    const body = encodeURIComponent(`Dopuna materijala
+Datum: ${todaySrDate()}
+
+${formatTransferRowsForEmail(transfers)}
+
+Pozdrav`);
+    window.location.href = `mailto:${TRANSFER_EMAIL}?subject=${subject}&body=${body}`;
+  }
+
+  function exportTransferExcel() {
+    if (!transfers.length) return;
+    downloadTransferXlsx(transfers);
+  }
+
+  function clearTransfers() {
+    if (confirm('Obrisati sve dopune?')) setTransfers([]);
+  }
+
+  function deleteTransferRecord(id) {
+    setTransfers(rows => rows.filter(row => row.id !== id));
   }
 
   function openModule(view) {
@@ -622,11 +800,7 @@ Pozdrav`);
   return <main className={`app app-${appView}`} onPointerMove={onPointerMove} onPointerUp={onPointerUp}>
     {appView === 'home' && <section className="home-screen">
       <div className="home-logo">
-        <div className="brand-strip home-brand">
-          <img src="/popovic.jpg" alt="Popović logo" />
-          <X size={22} className="collab-x" />
-          <img src="/verano.jpg" alt="Verano logo" />
-        </div>
+        <img className="app-logo-img" src={APP_LOGO_SRC} alt="Logo aplikacije" />
         <h1>Verano Logistics</h1>
       </div>
 
@@ -639,8 +813,7 @@ Pozdrav`);
         <button className="home-tile" onClick={() => openModule('time')}><span className="tile-icon">⏰</span><b>VREME</b></button>
       </div>
 
-      <div className="quote-card">
-        <span>Citati</span>
+      <div className="quote-card quote-only">
         <p>“{APP_QUOTES[quoteIndex]}”</p>
       </div>
     </section>}
@@ -771,7 +944,7 @@ Pozdrav`);
           </div>
         </div>
         <div className="qr-table-section">
-          <div className="qr-table-title"><h2>Excel tabela</h2><div className="qr-actions"><button onClick={emailMarija} disabled={!qrRows.length}><Send size={15}/> Pošalji Mariji</button><button className="ghost" onClick={copyQrTable} disabled={!qrRows.length}><Copy size={15}/> Kopiraj</button><button className="ghost" onClick={() => downloadQrCsv(qrRows)} disabled={!qrRows.length}><FileSpreadsheet size={15}/> CSV</button><button className="danger" onClick={() => { if (confirm('Obrisati celu QR tabelu?')) setQrRows([]); }} disabled={!qrRows.length}><Trash2 size={15}/> Obriši</button></div></div>
+          <div className="qr-table-title"><h2>Excel tabela</h2><div className="qr-actions"><button onClick={emailMarija} disabled={!qrRows.length}><Send size={15}/> Pošalji Mariji</button><button className="ghost" onClick={copyQrTable} disabled={!qrRows.length}><Copy size={15}/> Kopiraj</button><button className="ghost" onClick={() => downloadScanningXlsx(qrRows)} disabled={!qrRows.length}><FileSpreadsheet size={15}/> Preuzmi Excel</button><button className="danger" onClick={() => { if (confirm('Obrisati celu QR tabelu?')) setQrRows([]); }} disabled={!qrRows.length}><Trash2 size={15}/> Obriši</button></div></div>
           <div className="qr-table-wrap"><table className="qr-table"><thead><tr><th>#</th><th>Broj boksa</th><th>Tip robe</th><th>Opis</th><th></th></tr></thead><tbody>{!qrRows.length && <tr><td colSpan="5" className="empty-row">Još nema skeniranih boksova.</td></tr>}{qrRows.map((row, index) => <tr key={row.id}><td>{index + 1}</td><td><input value={row.boxNumber} onChange={e => updateQrRow(row.id, { boxNumber: e.target.value })}/></td><td><select value={row.productType} onChange={e => updateQrRow(row.id, { productType: e.target.value })}>{QR_PRODUCT_TYPES.map(type => <option key={type} value={type}>{type}</option>)}</select></td><td><input value={row.description} onChange={e => updateQrRow(row.id, { description: e.target.value })} placeholder="Opis" /></td><td><button className="icon-danger" onClick={() => deleteQrRow(row.id)}><Trash2 size={15}/></button></td></tr>)}</tbody></table></div>
         </div>
       </section>
@@ -779,12 +952,12 @@ Pozdrav`);
 
     {appView === 'transfer' && <>
       <ModuleHeader />
-      <section className="simple-module"><h2>Dopuna materijala</h2><div className="form-grid"><input placeholder="ART / ID" value={transferForm.art} onChange={e => setTransferForm(f => ({...f, art:e.target.value}))}/><input placeholder="Količina" value={transferForm.qty} onChange={e => setTransferForm(f => ({...f, qty:e.target.value}))}/><input placeholder="Pozicija odakle" value={transferForm.from} onChange={e => setTransferForm(f => ({...f, from:e.target.value}))}/><input placeholder="Pozicija gde" value={transferForm.to} onChange={e => setTransferForm(f => ({...f, to:e.target.value}))}/><input className="wide" placeholder="Opis / napomena" value={transferForm.note} onChange={e => setTransferForm(f => ({...f, note:e.target.value}))}/><button onClick={saveTransferRecord}><Save size={16}/> Sačuvaj dopunu</button></div><div className="record-list">{transfers.length===0 && <p className="empty-card">Još nema dopuna.</p>}{transfers.map(r => <div className="record-card" key={r.id}><b>{r.art || '-'}</b><span>{r.qty || '-'} kom</span><span>{r.from || '-'} → {r.to || '-'}</span><small>{formatDateTime(r.createdAt)}</small><p>{r.note}</p></div>)}</div></section>
+      <section className="simple-module"><h2>Dopuna materijala</h2><div className="form-grid"><input placeholder="Art" value={transferForm.art} onChange={e => setTransferForm(f => ({...f, art:e.target.value}))}/><input placeholder="Količina" value={transferForm.qty} onChange={e => setTransferForm(f => ({...f, qty:e.target.value}))}/><input placeholder="Bulk" value={transferForm.from} onChange={e => setTransferForm(f => ({...f, from:e.target.value}))}/><input placeholder="Pick" value={transferForm.to} onChange={e => setTransferForm(f => ({...f, to:e.target.value}))}/><input className="wide" placeholder="Opis / napomena" value={transferForm.note} onChange={e => setTransferForm(f => ({...f, note:e.target.value}))}/><div className="wide form-actions"><button onClick={saveTransferRecord}><Plus size={16}/> Dodaj stavku</button><button className="ghost" onClick={exportTransferExcel} disabled={!transfers.length}><FileSpreadsheet size={16}/> Preuzmi Excel</button><button onClick={emailTransfer} disabled={!transfers.length}><Mail size={16}/> Pošalji mail</button><button className="danger" onClick={clearTransfers} disabled={!transfers.length}><Trash2 size={16}/> Obriši sve</button></div></div><div className="record-list transfer-list">{transfers.length===0 && <p className="empty-card">Još nema dopuna. Unesi podatke i klikni „Dodaj stavku”.</p>}{transfers.map((r, index) => <div className="record-card transfer-card" key={r.id}><div className="transfer-card-head"><b>Dopuna {index + 1}</b><button className="icon-danger" onClick={() => deleteTransferRecord(r.id)}><Trash2 size={15}/></button></div><div className="transfer-lines"><span><strong>Art:</strong> {r.art || '-'}</span><span><strong>Količina:</strong> {r.qty || '-'}</span><span><strong>Bulk:</strong> {r.from || '-'}</span><span><strong>Pick:</strong> {r.to || '-'}</span>{r.note && <span><strong>Napomena:</strong> {r.note}</span>}</div><small>{formatDateTime(r.createdAt)}</small></div>)}</div></section>
     </>}
 
     {appView === 'count' && <>
       <ModuleHeader />
-      <section className="simple-module"><h2>Brojanje materijala</h2><div className="form-grid"><input placeholder="ART / ID" value={countForm.art} onChange={e => setCountForm(f => ({...f, art:e.target.value}))}/><input placeholder="Količina" value={countForm.qty} onChange={e => setCountForm(f => ({...f, qty:e.target.value}))}/><input placeholder="Pozicija" value={countForm.position} onChange={e => setCountForm(f => ({...f, position:e.target.value}))}/><input className="wide" placeholder="Opis / napomena" value={countForm.note} onChange={e => setCountForm(f => ({...f, note:e.target.value}))}/><button onClick={saveCountRecord}><Save size={16}/> Sačuvaj brojanje</button></div><div className="record-list">{counts.length===0 && <p className="empty-card">Još nema brojanja.</p>}{counts.map(r => <div className="record-card" key={r.id}><b>{r.art || '-'}</b><span>{r.qty || '-'} kom</span><span>Pozicija: {r.position || '-'}</span><small>{formatDateTime(r.createdAt)}</small><p>{r.note}</p></div>)}</div></section>
+      <section className="simple-module"><h2>Brojanje materijala</h2><div className="form-grid"><input placeholder="Art" value={countForm.art} onChange={e => setCountForm(f => ({...f, art:e.target.value}))}/><input placeholder="Količina" value={countForm.qty} onChange={e => setCountForm(f => ({...f, qty:e.target.value}))}/><input placeholder="Pozicija" value={countForm.position} onChange={e => setCountForm(f => ({...f, position:e.target.value}))}/><input className="wide" placeholder="Opis / napomena" value={countForm.note} onChange={e => setCountForm(f => ({...f, note:e.target.value}))}/><button onClick={saveCountRecord}><Save size={16}/> Sačuvaj brojanje</button></div><div className="record-list">{counts.length===0 && <p className="empty-card">Još nema brojanja.</p>}{counts.map(r => <div className="record-card" key={r.id}><b>{r.art || '-'}</b><span>{r.qty || '-'} kom</span><span>Pozicija: {r.position || '-'}</span><small>{formatDateTime(r.createdAt)}</small><p>{r.note}</p></div>)}</div></section>
     </>}
 
     {appView === 'history' && <>
