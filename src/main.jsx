@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
-import { RotateCw, Trash2, Plus, RotateCcw, Save, X, Edit3, MousePointer2, Grid3X3, Upload, Copy, Mail, Camera, FileSpreadsheet, ClipboardList, ArrowLeft, Send, Truck, QrCode, Repeat2, ListOrdered, History, Clock3, Home, Timer, PackageCheck } from 'lucide-react';
+import { RotateCw, Trash2, Plus, RotateCcw, Save, X, Edit3, MousePointer2, Grid3X3, Upload, Copy, Mail, Camera, FileSpreadsheet, ClipboardList, ArrowLeft, Send, Truck, QrCode, Repeat2, ListOrdered, History, Clock3, Home, Timer, PackageCheck, Search, Download, UploadCloud, Database, Image as ImageIcon } from 'lucide-react';
 import './styles.css';
 
 const STORAGE_KEY = 'truck-loading-simulator-v8';
@@ -12,6 +12,8 @@ const QR_STORAGE_KEY = 'truck-loading-simulator-qr-table-v1';
 const QR_PRODUCT_TYPES = ['Roletne', 'Tende', 'Žaluzine', 'Extra Transfer'];
 const TRANSFER_STORAGE_KEY = 'verano-transfer-records-v1';
 const COUNT_STORAGE_KEY = 'verano-count-records-v1';
+const INVENTORY_STORAGE_KEY = 'verano-inventory-records-v1';
+const BACKUP_SCHEMA_VERSION = 1;
 const APP_QUOTES = [
   'Marija čeka tabelu.',
   'Ostavi napolitanku Jovane.',
@@ -336,6 +338,38 @@ function downloadQrCsv(rows) {
   URL.revokeObjectURL(url);
 }
 
+function downloadJsonFile(filename, data) {
+  const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+function readFileAsText(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result);
+    reader.onerror = reject;
+    reader.readAsText(file);
+  });
+}
+function readImageFiles(files, limit = 6) {
+  const selected = Array.from(files || []).slice(0, limit);
+  return Promise.all(selected.map(file => new Promise(resolve => {
+    const reader = new FileReader();
+    reader.onload = () => resolve({ id: crypto.randomUUID(), name: file.name, dataUrl: reader.result, createdAt: new Date().toISOString() });
+    reader.readAsDataURL(file);
+  })));
+}
+function matchesQuery(text, query) {
+  if (!query.trim()) return true;
+  return String(text || '').toLowerCase().includes(query.trim().toLowerCase());
+}
+
 
 function App() {
   const [state, setState] = useState(() => {
@@ -364,8 +398,14 @@ function App() {
   const [counts, setCounts] = useState(() => {
     try { return JSON.parse(localStorage.getItem(COUNT_STORAGE_KEY)) || []; } catch { return []; }
   });
+  const [inventory, setInventory] = useState(() => {
+    try { return JSON.parse(localStorage.getItem(INVENTORY_STORAGE_KEY)) || []; } catch { return []; }
+  });
   const [transferForm, setTransferForm] = useState({ art: '', qty: '', from: '', to: '', note: '' });
   const [countForm, setCountForm] = useState({ art: '', qty: '', position: '', note: '' });
+  const [inventoryForm, setInventoryForm] = useState({ art: '', name: '', qty: '', position: '', note: '' });
+  const [historySearch, setHistorySearch] = useState('');
+  const [inventorySearch, setInventorySearch] = useState('');
   const [pendingQr, setPendingQr] = useState('');
   const pendingQrRef = useRef('');
   const [manualQrValue, setManualQrValue] = useState('');
@@ -380,6 +420,7 @@ function App() {
   useEffect(() => { localStorage.setItem(QR_STORAGE_KEY, JSON.stringify(qrRows)); }, [qrRows]);
   useEffect(() => { localStorage.setItem(TRANSFER_STORAGE_KEY, JSON.stringify(transfers)); }, [transfers]);
   useEffect(() => { localStorage.setItem(COUNT_STORAGE_KEY, JSON.stringify(counts)); }, [counts]);
+  useEffect(() => { localStorage.setItem(INVENTORY_STORAGE_KEY, JSON.stringify(inventory)); }, [inventory]);
   useEffect(() => {
     const quoteTimer = setInterval(() => setQuoteIndex(i => (i + 1) % APP_QUOTES.length), 5 * 60 * 1000);
     const clockTimer = setInterval(() => setNow(new Date()), 60 * 1000);
@@ -476,6 +517,61 @@ function App() {
     const trailerArea = state.trailer.length * state.trailer.width;
     return { invalidIds, usedArea, trailerArea, valid: invalidIds.size === 0 };
   }, [placed, state.trailer]);
+
+  const allHistory = useMemo(() => {
+    const loads = (state.savedLoads || []).map(load => ({
+      id: load.id,
+      type: 'Utovar',
+      icon: '🚚',
+      createdAt: load.createdAt,
+      title: `Utovar prikolice${load.driverName ? ` - ${load.driverName}` : ''}`,
+      summary: `Vozač: ${load.driverName || '-'} · Prikolica: ${load.trailerWeight || '-'} · Teret: ${load.cargoWeight || '-'} · Status: ${load.valid ? 'OK' : 'NEMA MESTA'}`,
+      searchText: JSON.stringify(load)
+    }));
+    const scans = qrRows.map((row, index) => ({
+      id: row.id,
+      type: 'Skeniranje',
+      icon: '📦',
+      createdAt: row.createdAt,
+      title: `Boks ${row.boxNumber || index + 1}`,
+      summary: `${row.productType || '-'} · ${row.description || 'Bez opisa'}`,
+      searchText: JSON.stringify(row)
+    }));
+    const transferItems = transfers.map(row => ({
+      id: row.id,
+      type: 'Dopuna',
+      icon: '🔄',
+      createdAt: row.createdAt,
+      title: `Art ${row.art || '-'}`,
+      summary: `Količina: ${row.qty || '-'} · Bulk: ${row.from || '-'} · Pick: ${row.to || '-'}${row.note ? ` · ${row.note}` : ''}`,
+      searchText: JSON.stringify(row)
+    }));
+    const countItems = counts.map(row => ({
+      id: row.id,
+      type: 'Brojanje',
+      icon: '🔢',
+      createdAt: row.createdAt,
+      title: `Art ${row.art || '-'}`,
+      summary: `Količina: ${row.qty || '-'} · Pozicija: ${row.position || '-'}${row.note ? ` · ${row.note}` : ''}`,
+      searchText: JSON.stringify(row)
+    }));
+    const inventoryItems = inventory.map(row => ({
+      id: row.id,
+      type: 'Inventar',
+      icon: '📊',
+      createdAt: row.updatedAt || row.createdAt,
+      title: `${row.art || '-'} ${row.name ? `· ${row.name}` : ''}`,
+      summary: `Stanje: ${row.qty || '-'} · Pozicija: ${row.position || '-'}${row.note ? ` · ${row.note}` : ''}`,
+      searchText: JSON.stringify(row)
+    }));
+    return [...loads, ...scans, ...transferItems, ...countItems, ...inventoryItems]
+      .sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0));
+  }, [state.savedLoads, qrRows, transfers, counts, inventory]);
+  const filteredHistory = useMemo(() => allHistory.filter(item => {
+    const dateText = item.createdAt ? `${formatDateTime(item.createdAt)} ${new Date(item.createdAt).toISOString().slice(0, 10)}` : '';
+    return matchesQuery(`${item.type} ${item.title} ${item.summary} ${dateText} ${item.searchText}`, historySearch);
+  }), [allHistory, historySearch]);
+  const filteredInventory = useMemo(() => inventory.filter(item => matchesQuery(`${item.art} ${item.name} ${item.qty} ${item.position} ${item.note}`, inventorySearch)), [inventory, inventorySearch]);
 
   function updateTrailer(field, value) {
     setState(s => ({ ...s, trailer: { ...s.trailer, [field]: Math.max(0.1, Number(value) || 0.1) } }));
@@ -752,12 +848,68 @@ Pozdrav`);
     setCountForm({ art: '', qty: '', position: '', note: '' });
   }
 
+
+  function saveInventoryItem() {
+    if (!inventoryForm.art.trim() && !inventoryForm.name.trim()) return;
+    const record = { id: crypto.randomUUID(), createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(), photos: [], ...inventoryForm };
+    setInventory(rows => [record, ...rows]);
+    setInventoryForm({ art: '', name: '', qty: '', position: '', note: '' });
+  }
+  function updateInventoryItem(id, patch) {
+    setInventory(rows => rows.map(row => row.id === id ? { ...row, ...patch, updatedAt: new Date().toISOString() } : row));
+  }
+  function deleteInventoryItem(id) {
+    if (confirm('Obrisati artikal iz inventara?')) setInventory(rows => rows.filter(row => row.id !== id));
+  }
+  async function uploadInventoryPhotos(id, files) {
+    const photos = await readImageFiles(files, 4);
+    if (!photos.length) return;
+    setInventory(rows => rows.map(row => row.id === id ? { ...row, photos: [...(row.photos || []), ...photos], updatedAt: new Date().toISOString() } : row));
+  }
+  function removeInventoryPhoto(itemId, photoId) {
+    setInventory(rows => rows.map(row => row.id === itemId ? { ...row, photos: (row.photos || []).filter(p => p.id !== photoId), updatedAt: new Date().toISOString() } : row));
+  }
+  function downloadBackup() {
+    const backup = {
+      schema: 'verano-logistics-backup',
+      version: BACKUP_SCHEMA_VERSION,
+      exportedAt: new Date().toISOString(),
+      state,
+      qrRows,
+      transfers,
+      counts,
+      inventory
+    };
+    downloadJsonFile(`verano-backup-${todayIsoDate()}.json`, backup);
+  }
+  async function restoreBackup(file) {
+    if (!file) return;
+    try {
+      const text = await readFileAsText(file);
+      const backup = JSON.parse(text);
+      if (!backup || backup.schema !== 'verano-logistics-backup') {
+        alert('Ovo ne izgleda kao Verano backup fajl.');
+        return;
+      }
+      if (!confirm('Vraćanje backup-a će zameniti lokalne podatke u aplikaciji. Nastaviti?')) return;
+      if (backup.state) setState({ ...DEFAULT_STATE, ...backup.state, savedLoads: backup.state.savedLoads || [] });
+      setQrRows(backup.qrRows || []);
+      setTransfers(backup.transfers || []);
+      setCounts(backup.counts || []);
+      setInventory(backup.inventory || []);
+      alert('Backup je vraćen.');
+    } catch (err) {
+      console.error(err);
+      alert('Backup nije mogao da se učita.');
+    }
+  }
+
   function moduleTitle() {
     return {
       load: 'Utovar prikolice',
       scan: 'Skeniranje boksova',
       transfer: 'Dopuna materijala',
-      count: 'Brojanje materijala',
+      count: 'Inventar / stanje',
       history: 'Istorija',
       time: 'Vreme'
     }[appView] || 'Verano Logistics';
@@ -771,7 +923,7 @@ Pozdrav`);
       <div><h3>4. Pošalji Mariji</h3><p>Dugme otvara mail aplikaciju sa tabelom u tekstu poruke. Ti samo proveriš i klikneš Send.</p></div>
     </div>;
     if (appView === 'transfer') return <div className="instructions-grid"><div><h3>Dopuna materijala</h3><p>Unesi ART/ID, količinu, poziciju sa koje je uzeto i poziciju na koju je preneto. Sačuvani red ostaje u lokalnoj istoriji uređaja.</p></div></div>;
-    if (appView === 'count') return <div className="instructions-grid"><div><h3>Brojanje materijala</h3><p>Unesi ART/ID, količinu i poziciju. Koristi se za brzu lokalnu evidenciju stanja.</p></div></div>;
+    if (appView === 'count') return <div className="instructions-grid"><div><h3>Inventar / stanje</h3><p>Dodaj artikal, količinu, poziciju i slike. Sve ostaje lokalno i može da se pronađe kroz istoriju i pretragu.</p></div><div><h3>Brojanje</h3><p>Donji deo ekrana možeš koristiti za brza brojanja stanja materijala po pozicijama.</p></div></div>;
     return <div className="instructions-grid">
       <div><h3>1. Izaberi način rada</h3><p><b>Drag</b> služi za ručno pomeranje robe. <b>Grid</b> dodaje robu u jednu od tri trake prikolice.</p></div>
       <div><h3>2. Menjanje robe</h3><p>U panelu „Tipovi robe“ možeš promeniti naziv, dimenzije, količinu i boju.</p></div>
@@ -808,7 +960,7 @@ Pozdrav`);
         <button className="home-tile" onClick={() => openModule('load')}><span className="tile-icon">🚚</span><b>UTOVAR</b></button>
         <button className="home-tile" onClick={() => openModule('scan')}><span className="tile-icon">📦</span><b>SKENIRANJE</b></button>
         <button className="home-tile" onClick={() => openModule('transfer')}><span className="tile-icon">🔄</span><b>DOPUNA</b></button>
-        <button className="home-tile" onClick={() => openModule('count')}><span className="tile-icon">🔢</span><b>BROJANJE</b></button>
+        <button className="home-tile" onClick={() => openModule('count')}><span className="tile-icon">📊</span><b>INVENTAR</b></button>
         <button className="home-tile" onClick={() => openModule('history')}><span className="tile-icon">📖</span><b>ISTORIJA</b></button>
         <button className="home-tile" onClick={() => openModule('time')}><span className="tile-icon">⏰</span><b>VREME</b></button>
       </div>
@@ -957,14 +1109,56 @@ Pozdrav`);
 
     {appView === 'count' && <>
       <ModuleHeader />
-      <section className="simple-module"><h2>Brojanje materijala</h2><div className="form-grid"><input placeholder="Art" value={countForm.art} onChange={e => setCountForm(f => ({...f, art:e.target.value}))}/><input placeholder="Količina" value={countForm.qty} onChange={e => setCountForm(f => ({...f, qty:e.target.value}))}/><input placeholder="Pozicija" value={countForm.position} onChange={e => setCountForm(f => ({...f, position:e.target.value}))}/><input className="wide" placeholder="Opis / napomena" value={countForm.note} onChange={e => setCountForm(f => ({...f, note:e.target.value}))}/><button onClick={saveCountRecord}><Save size={16}/> Sačuvaj brojanje</button></div><div className="record-list">{counts.length===0 && <p className="empty-card">Još nema brojanja.</p>}{counts.map(r => <div className="record-card" key={r.id}><b>{r.art || '-'}</b><span>{r.qty || '-'} kom</span><span>Pozicija: {r.position || '-'}</span><small>{formatDateTime(r.createdAt)}</small><p>{r.note}</p></div>)}</div></section>
+      <section className="simple-module inventory-module">
+        <h2>Inventar / stanje materijala</h2>
+        <div className="form-grid">
+          <input placeholder="Art" value={inventoryForm.art} onChange={e => setInventoryForm(f => ({...f, art:e.target.value}))}/>
+          <input placeholder="Naziv / opis artikla" value={inventoryForm.name} onChange={e => setInventoryForm(f => ({...f, name:e.target.value}))}/>
+          <input placeholder="Količina" value={inventoryForm.qty} onChange={e => setInventoryForm(f => ({...f, qty:e.target.value}))}/>
+          <input placeholder="Pozicija" value={inventoryForm.position} onChange={e => setInventoryForm(f => ({...f, position:e.target.value}))}/>
+          <input className="wide" placeholder="Napomena" value={inventoryForm.note} onChange={e => setInventoryForm(f => ({...f, note:e.target.value}))}/>
+          <button className="wide" onClick={saveInventoryItem}><Plus size={16}/> Dodaj u inventar</button>
+        </div>
+
+        <div className="search-panel">
+          <Search size={18}/>
+          <input placeholder="Pretraga inventara: art, naziv, količina, pozicija..." value={inventorySearch} onChange={e => setInventorySearch(e.target.value)} />
+        </div>
+
+        <div className="inventory-list">
+          {filteredInventory.length === 0 && <p className="empty-card">Nema artikala u inventaru ili nema rezultata za pretragu.</p>}
+          {filteredInventory.map(item => <div className="inventory-card" key={item.id}>
+            <div className="inventory-head"><b>{item.art || '-'} {item.name ? `· ${item.name}` : ''}</b><button className="icon-danger" onClick={() => deleteInventoryItem(item.id)}><Trash2 size={15}/></button></div>
+            <div className="inventory-fields">
+              <label>Količina<input value={item.qty || ''} onChange={e => updateInventoryItem(item.id, { qty: e.target.value })}/></label>
+              <label>Pozicija<input value={item.position || ''} onChange={e => updateInventoryItem(item.id, { position: e.target.value })}/></label>
+              <label className="wide">Napomena<input value={item.note || ''} onChange={e => updateInventoryItem(item.id, { note: e.target.value })}/></label>
+            </div>
+            <div className="inventory-photos">
+              <label className="upload-btn"><ImageIcon size={14}/> Dodaj slike<input type="file" accept="image/*" multiple onChange={e => uploadInventoryPhotos(item.id, e.target.files)} /></label>
+              <div className="photo-strip">{(item.photos || []).map(photo => <span key={photo.id} className="photo-mini"><img src={photo.dataUrl} alt={photo.name}/><button onClick={() => removeInventoryPhoto(item.id, photo.id)}>×</button></span>)}</div>
+            </div>
+            <small>Ažurirano: {formatDateTime(item.updatedAt || item.createdAt)}</small>
+          </div>)}
+        </div>
+      </section>
+
+      <section className="simple-module"><h2>Brzo brojanje</h2><div className="form-grid"><input placeholder="Art" value={countForm.art} onChange={e => setCountForm(f => ({...f, art:e.target.value}))}/><input placeholder="Količina" value={countForm.qty} onChange={e => setCountForm(f => ({...f, qty:e.target.value}))}/><input placeholder="Pozicija" value={countForm.position} onChange={e => setCountForm(f => ({...f, position:e.target.value}))}/><input className="wide" placeholder="Opis / napomena" value={countForm.note} onChange={e => setCountForm(f => ({...f, note:e.target.value}))}/><button onClick={saveCountRecord}><Save size={16}/> Sačuvaj brojanje</button></div><div className="record-list">{counts.length===0 && <p className="empty-card">Još nema brojanja.</p>}{counts.map(r => <div className="record-card" key={r.id}><b>{r.art || '-'}</b><span>{r.qty || '-'} kom</span><span>Pozicija: {r.position || '-'}</span><small>{formatDateTime(r.createdAt)}</small><p>{r.note}</p></div>)}</div></section>
     </>}
 
     {appView === 'history' && <>
       <ModuleHeader />
-      <section className="simple-module"><h2>Istorija</h2><div className="history-grid"><div><h3>Prikolice</h3><p>{(state.savedLoads || []).length} sačuvanih prikolica</p></div><div><h3>Boksovi</h3><p>{qrRows.length} skeniranih boksova</p></div><div><h3>Dopune</h3><p>{transfers.length} zapisa</p></div><div><h3>Brojanje</h3><p>{counts.length} zapisa</p></div></div></section>
+      <section className="simple-module history-module">
+        <h2>Istorija i pretraga</h2>
+        <div className="history-grid"><div><h3>Prikolice</h3><p>{(state.savedLoads || []).length}</p></div><div><h3>Boksovi</h3><p>{qrRows.length}</p></div><div><h3>Dopune</h3><p>{transfers.length}</p></div><div><h3>Inventar</h3><p>{inventory.length}</p></div></div>
+        <div className="search-panel"><Search size={18}/><input placeholder="Pretraži sve: datum, boks, art, roba, bulk, pick, vozač..." value={historySearch} onChange={e => setHistorySearch(e.target.value)} /></div>
+        <div className="backup-actions"><button onClick={downloadBackup}><Download size={16}/> Preuzmi backup</button><label className="upload-btn"><UploadCloud size={16}/> Vrati backup<input type="file" accept="application/json,.json" onChange={e => restoreBackup(e.target.files?.[0])}/></label></div>
+        <div className="history-list">
+          {filteredHistory.length === 0 && <p className="empty-card">Nema rezultata za ovu pretragu.</p>}
+          {filteredHistory.map(item => <div className="history-card" key={`${item.type}-${item.id}`}><div className="history-icon">{item.icon}</div><div><div className="history-card-head"><b>{item.title}</b><span>{item.type}</span></div><p>{item.summary}</p><small>{item.createdAt ? formatDateTime(item.createdAt) : '-'}</small></div></div>)}
+        </div>
+      </section>
     </>}
-
     {appView === 'time' && <>
       <ModuleHeader />
       <section className="time-screen"><div className="time-card"><Clock3 size={64}/><h2>{now.toLocaleTimeString('sr-RS', { hour: '2-digit', minute: '2-digit' })}</h2><p>Radno vreme: 07:00–15:00</p><strong>{workInfo.label}</strong><div className="time-left">{workInfo.status}</div></div></section>
