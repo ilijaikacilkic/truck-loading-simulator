@@ -502,3 +502,24 @@ body{background:linear-gradient(180deg,#eef7ff 0%,#f7fbff 42%,#eef4ff 100%)}
 
 /* v11 history/search/backup/inventory */
 .search-panel{margin:16px 0;display:flex;align-items:center;gap:10px;background:#f8fbff;border:1px solid #dbeafe;border-radius:16px;padding:10px 12px}.search-panel input{flex:1;min-height:44px;font-size:15px;border:0;background:transparent;outline:0}.backup-actions{display:flex;flex-wrap:wrap;gap:10px;margin:12px 0 18px}.backup-actions button,.backup-actions .upload-btn{min-height:46px;justify-content:center}.history-list,.inventory-list{display:grid;gap:12px;margin-top:14px}.history-card{display:grid;grid-template-columns:auto 1fr;gap:12px;background:#f8fbff;border:1px solid #dbeafe;border-radius:16px;padding:12px}.history-icon{width:44px;height:44px;border-radius:14px;background:#e0f2fe;display:grid;place-items:center;font-size:24px}.history-card-head{display:flex;align-items:center;justify-content:space-between;gap:10px}.history-card-head b{color:#0f3a66;font-size:16px}.history-card-head span{background:#dbeafe;color:#0f3a66;border-radius:999px;padding:5px 9px;font-size:12px;font-weight:900}.history-card p{margin:6px 0;color:#334155}.history-card small{color:#64748b}.inventory-card{background:linear-gradient(180deg,#fff,#f0f9ff);border:1px solid #bfdbfe;border-radius:18px;padding:14px;display:grid;gap:10px}.inventory-head{display:flex;align-items:center;justify-content:space-between;gap:10px}.inventory-head b{font-size:18px;color:#0f3a66}.inventory-fields{display:grid;grid-template-columns:1fr 1fr;gap:10px}.inventory-fields label{display:grid;gap:5px;color:#475569;font-weight:800;font-size:13px}.inventory-fields input{min-height:42px}.inventory-fields .wide{grid-column:1/-1}.inventory-photos{display:grid;gap:8px}.inventory-module{margin-bottom:16px}.history-module .history-grid{margin-bottom:12px}@media(max-width:768px){.backup-actions{display:grid;grid-template-columns:1fr}.backup-actions button,.backup-actions .upload-btn{width:100%}.history-card{grid-template-columns:1fr}.history-icon{width:40px;height:40px}.history-card-head{display:grid;gap:6px}.inventory-fields{grid-template-columns:1fr}.search-panel{align-items:flex-start}.search-panel svg{margin-top:12px}}
+.art-input-wrap {
+  display: flex;
+  align-items: center;
+  gap: 0;
+  background: #fff;
+  border: 1px solid #cbd5e1;
+  border-radius: 12px;
+  overflow: hidden;
+}
+.art-input-wrap span {
+  padding: 10px 0 10px 12px;
+  font-weight: 800;
+  color: #0f172a;
+  background: #eff6ff;
+}
+.art-input-wrap input {
+  border: 0 !important;
+  box-shadow: none !important;
+  flex: 1;
+  min-width: 0;
+}

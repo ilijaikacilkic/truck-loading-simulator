@@ -11,6 +11,7 @@ const APP_LOGO_SRC = '/logo.png'; // OVDE promeni putanju za logo/ikonicu aplika
 const QR_STORAGE_KEY = 'truck-loading-simulator-qr-table-v1';
 const QR_PRODUCT_TYPES = ['Roletne', 'Tende', 'Žaluzine', 'Extra Transfer'];
 const TRANSFER_STORAGE_KEY = 'verano-transfer-records-v1';
+const SENT_TRANSFER_STORAGE_KEY = 'verano-sent-transfer-records-v1';
 const COUNT_STORAGE_KEY = 'verano-count-records-v1';
 const INVENTORY_STORAGE_KEY = 'verano-inventory-records-v1';
 const BACKUP_SCHEMA_VERSION = 1;
@@ -32,12 +33,12 @@ const APP_QUOTES = [
 const DEFAULT_STATE = {
   trailer: { length: 13.6, width: 2.45 },
   cargoTypes: [
-    { id: crypto.randomUUID(), name: 'Roletne', length: 3.5, width: 0.8, qty: 2, color: '#2563eb' },
-    { id: crypto.randomUUID(), name: 'Tende', length: 6.0, width: 0.8, qty: 2, color: '#16a34a' },
-    { id: crypto.randomUUID(), name: 'Žaluzine', length: 4.0, width: 0.8, qty: 2, color: '#f97316' },
-    { id: crypto.randomUUID(), name: 'Rumenka', length: 5.0, width: 0.8, qty: 1, color: '#9333ea' },
-    { id: crypto.randomUUID(), name: 'Extra Transfer', length: 6.0, width: 0.8, qty: 1, color: '#dc2626' },
-    { id: crypto.randomUUID(), name: 'Paleta', length: 0.8, width: 0.8, qty: 3, color: '#0891b2' },
+    { id: crypto.randomUUID(), name: 'Roletne', length: 3.5, width: 0.8, qty: 2, stackCount: 4, color: '#2563eb' },
+    { id: crypto.randomUUID(), name: 'Tende', length: 6.0, width: 0.8, qty: 2, stackCount: 4, color: '#16a34a' },
+    { id: crypto.randomUUID(), name: 'Žaluzine', length: 4.0, width: 0.8, qty: 2, stackCount: 4, color: '#f97316' },
+    { id: crypto.randomUUID(), name: 'Rumenka', length: 5.0, width: 0.8, qty: 1, stackCount: 4, color: '#9333ea' },
+    { id: crypto.randomUUID(), name: 'Extra Transfer', length: 6.0, width: 0.8, qty: 1, stackCount: 4, color: '#dc2626' },
+    { id: crypto.randomUUID(), name: 'Paleta', length: 0.8, width: 0.8, qty: 3, stackCount: 1, color: '#0891b2' },
   ],
   boxes: [],
   savedLoads: [],
@@ -49,9 +50,7 @@ function rectsOverlap(a, b) {
   return a.x < b.x + b.w && a.x + a.w > b.x && a.y < b.y + b.h && a.y + a.h > b.y;
 }
 function boxRect(box) {
-  const length = box.rotated ? box.width : box.length;
-  const width = box.rotated ? box.length : box.width;
-  return { x: box.x, y: box.y, w: length, h: width };
+  return { x: box.x, y: box.y, w: Number(box.length) || 0, h: Number(box.width) || 0 };
 }
 
 const SNAP_THRESHOLD_M = 18 / PX_PER_METER;
@@ -62,8 +61,8 @@ function rangesOverlap(aStart, aEnd, bStart, bEnd) {
   return aStart < bEnd && aEnd > bStart;
 }
 function snapBoxPosition(box, boxes, trailer) {
-  const bw = box.rotated ? box.width : box.length;
-  const bh = box.rotated ? box.length : box.width;
+  const bw = Number(box.length) || 0;
+  const bh = Number(box.width) || 0;
   let x = box.x;
   let y = box.y;
 
@@ -112,6 +111,7 @@ function makeBoxesFromTypes(cargoTypes, existingBoxes) {
         length: Number(type.length),
         width: Number(type.width),
         color: type.color,
+        stackCount: Number(type.stackCount || 4),
         x: 0,
         y: 0,
         placed: false,
@@ -121,7 +121,7 @@ function makeBoxesFromTypes(cargoTypes, existingBoxes) {
   }
   return next.map(b => {
     const t = cargoTypes.find(t => t.id === b.typeId);
-    return t ? { ...b, name: t.name, length: Number(t.length), width: Number(t.width), color: t.color } : b;
+    return t ? { ...b, name: t.name, length: Number(t.length), width: Number(t.width), color: t.color, stackCount: Number(t.stackCount || b.stackCount || 4) } : b;
   });
 }
 
@@ -168,7 +168,7 @@ function buildSharePayload(load) {
     cargoWeight: load.cargoWeight || '',
     trailer: load.trailer,
     boxes: (load.boxes || []).filter(b => b.placed).map(b => ({
-      id: b.id, name: b.name, length: b.length, width: b.width, color: b.color, x: b.x, y: b.y, placed: true, rotated: b.rotated
+      id: b.id, name: b.name, length: b.length, width: b.width, color: b.color, x: b.x, y: b.y, placed: true, stackCount: b.stackCount || 1
     })),
     valid: load.valid,
     thumbnail: createThumbnail(load.trailer, load.boxes || []),
@@ -395,6 +395,10 @@ function App() {
   const [transfers, setTransfers] = useState(() => {
     try { return JSON.parse(localStorage.getItem(TRANSFER_STORAGE_KEY)) || []; } catch { return []; }
   });
+  const [sentTransfers, setSentTransfers] = useState(() => {
+    try { return JSON.parse(localStorage.getItem(SENT_TRANSFER_STORAGE_KEY)) || []; } catch { return []; }
+  });
+  const [lastPlacedBoxId, setLastPlacedBoxId] = useState(null);
   const [counts, setCounts] = useState(() => {
     try { return JSON.parse(localStorage.getItem(COUNT_STORAGE_KEY)) || []; } catch { return []; }
   });
@@ -419,6 +423,7 @@ function App() {
   useEffect(() => { pendingQrRef.current = pendingQr; }, [pendingQr]);
   useEffect(() => { localStorage.setItem(QR_STORAGE_KEY, JSON.stringify(qrRows)); }, [qrRows]);
   useEffect(() => { localStorage.setItem(TRANSFER_STORAGE_KEY, JSON.stringify(transfers)); }, [transfers]);
+  useEffect(() => { localStorage.setItem(SENT_TRANSFER_STORAGE_KEY, JSON.stringify(sentTransfers)); }, [sentTransfers]);
   useEffect(() => { localStorage.setItem(COUNT_STORAGE_KEY, JSON.stringify(counts)); }, [counts]);
   useEffect(() => { localStorage.setItem(INVENTORY_STORAGE_KEY, JSON.stringify(inventory)); }, [inventory]);
   useEffect(() => {
@@ -518,6 +523,8 @@ function App() {
     return { invalidIds, usedArea, trailerArea, valid: invalidIds.size === 0 };
   }, [placed, state.trailer]);
 
+  const totalPlacedBoxCount = placed.reduce((sum, b) => sum + Number(b.stackCount || 1), 0);
+
   const allHistory = useMemo(() => {
     const loads = (state.savedLoads || []).map(load => ({
       id: load.id,
@@ -537,7 +544,7 @@ function App() {
       summary: `${row.productType || '-'} · ${row.description || 'Bez opisa'}`,
       searchText: JSON.stringify(row)
     }));
-    const transferItems = transfers.map(row => ({
+    const transferItems = [...transfers, ...sentTransfers].map(row => ({
       id: row.id,
       type: 'Dopuna',
       icon: '🔄',
@@ -566,7 +573,7 @@ function App() {
     }));
     return [...loads, ...scans, ...transferItems, ...countItems, ...inventoryItems]
       .sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0));
-  }, [state.savedLoads, qrRows, transfers, counts, inventory]);
+  }, [state.savedLoads, qrRows, transfers, sentTransfers, counts, inventory]);
   const filteredHistory = useMemo(() => allHistory.filter(item => {
     const dateText = item.createdAt ? `${formatDateTime(item.createdAt)} ${new Date(item.createdAt).toISOString().slice(0, 10)}` : '';
     return matchesQuery(`${item.type} ${item.title} ${item.summary} ${dateText} ${item.searchText}`, historySearch);
@@ -583,7 +590,7 @@ function App() {
     });
   }
   function addType() {
-    const newType = { id: crypto.randomUUID(), name: 'Nova stavka robe', length: 1.0, width: 0.8, qty: 1, color: '#22c55e' };
+    const newType = { id: crypto.randomUUID(), name: 'Nova stavka robe', length: 1.0, width: 0.8, qty: 1, stackCount: 4, color: '#22c55e' };
     setState(s => ({ ...s, cargoTypes: [...s.cargoTypes, newType], boxes: makeBoxesFromTypes([...s.cargoTypes, newType], s.boxes) }));
   }
   function deleteType(id) {
@@ -601,7 +608,7 @@ function App() {
     e.preventDefault();
     const isPlaced = box.placed;
     const p = isPlaced && trailerRef.current ? pointerPos(e) : { x: 0, y: 0 };
-    setDrag({ id: box.id, offsetX: isPlaced ? p.x - box.x : 0.2, offsetY: isPlaced ? p.y - box.y : 0.2 });
+    setDrag({ id: box.id, wasPlaced: isPlaced, offsetX: isPlaced ? p.x - box.x : 0.2, offsetY: isPlaced ? p.y - box.y : 0.2 });
   }
   function onPointerMove(e) {
     if (!drag || !trailerRef.current) return;
@@ -609,8 +616,8 @@ function App() {
     setState(s => {
       const movingBox = s.boxes.find(b => b.id === drag.id);
       if (!movingBox) return s;
-      const bw = movingBox.rotated ? movingBox.width : movingBox.length;
-      const bh = movingBox.rotated ? movingBox.length : movingBox.width;
+      const bw = Number(movingBox.length) || 0;
+      const bh = Number(movingBox.width) || 0;
       const rawBox = {
         ...movingBox,
         placed: true,
@@ -624,6 +631,7 @@ function App() {
   function onPointerUp() {
     if (!drag) return;
     setState(s => ({ ...s, boxes: s.boxes.map(b => b.id === drag.id ? snapBoxPosition(b, s.boxes, s.trailer) : b) }));
+    if (!drag.wasPlaced) setLastPlacedBoxId(drag.id);
     setDrag(null);
   }
   function selectForGrid(box) {
@@ -637,8 +645,8 @@ function App() {
     setState(s => {
       const movingBox = s.boxes.find(b => b.id === selectedBoxId && !b.placed);
       if (!movingBox) return s;
-      const bw = movingBox.rotated ? movingBox.width : movingBox.length;
-      const bh = movingBox.rotated ? movingBox.length : movingBox.width;
+      const bw = Number(movingBox.length) || 0;
+      const bh = Number(movingBox.width) || 0;
       const laneHeight = s.trailer.width / LANES;
       const laneIndex = clamp(Math.floor(p.y / laneHeight), 0, LANES - 1);
       const laneTop = laneIndex * laneHeight;
@@ -651,13 +659,23 @@ function App() {
       const nextX = laneBoxes.length ? Math.max(...laneBoxes.map(r => r.x + r.w)) : 0;
       // Grid Click is locked: user chooses only the lane. The app snaps to the left edge
       // for the first box and then directly behind the last box in that lane.
-      const candidate = { ...movingBox, placed: true, x: snapToGrid(nextX), y: laneY };
+      const candidateX = snapToGrid(nextX);
+      if (bh > laneHeight || candidateX + bw > s.trailer.length) {
+        alert('Ne može da stane u ovaj red.');
+        return s;
+      }
+      const candidate = { ...movingBox, placed: true, x: candidateX, y: laneY };
+      setLastPlacedBoxId(selectedBoxId);
       return { ...s, boxes: s.boxes.map(b => b.id === selectedBoxId ? candidate : b) };
     });
   }
-  function rotateBox(id) { setState(s => ({ ...s, boxes: s.boxes.map(b => b.id === id ? { ...b, rotated: !b.rotated } : b) })); }
+  function undoLastPlaced() {
+    if (!lastPlacedBoxId) return;
+    setState(s => ({ ...s, boxes: s.boxes.map(b => b.id === lastPlacedBoxId ? { ...b, placed: false, x: 0, y: 0 } : b) }));
+    setLastPlacedBoxId(null);
+  }
   function unplaceBox(id) { setState(s => ({ ...s, boxes: s.boxes.map(b => b.id === id ? { ...b, placed: false, x: 0, y: 0 } : b) })); }
-  function clearTrailer() { setState(s => ({ ...s, boxes: s.boxes.map(b => ({ ...b, placed: false, x: 0, y: 0 })) })); }
+  function clearTrailer() { setState(s => ({ ...s, boxes: s.boxes.map(b => ({ ...b, placed: false, x: 0, y: 0 })) })); setLastPlacedBoxId(null); }
   function resetAll() { if (confirm('Reset entire project?')) setState({ ...DEFAULT_STATE, boxes: makeBoxesFromTypes(DEFAULT_STATE.cargoTypes, []) }); }
 
   function saveCurrentLoad() {
@@ -790,6 +808,9 @@ ${formatTransferRowsForEmail(transfers)}
 
 Pozdrav`);
     window.location.href = `mailto:${TRANSFER_EMAIL}?subject=${subject}&body=${body}`;
+    const sentAt = new Date().toISOString();
+    setSentTransfers(rows => [...transfers.map(t => ({ ...t, sentAt })), ...rows]);
+    setTransfers([]);
   }
 
   function exportTransferExcel() {
@@ -835,8 +856,16 @@ Pozdrav`);
   }
 
   function saveTransferRecord() {
-    if (!transferForm.art.trim() && !transferForm.qty.trim()) return;
-    const record = { id: crypto.randomUUID(), createdAt: new Date().toISOString(), ...transferForm };
+    const artDigits = String(transferForm.art || '').replace(/\D/g, '').slice(0, 6);
+    if (artDigits.length !== 6) {
+      alert('Art nije kompletan');
+      return;
+    }
+    if (!transferForm.qty.trim()) {
+      alert('Unesi količinu.');
+      return;
+    }
+    const record = { id: crypto.randomUUID(), createdAt: new Date().toISOString(), ...transferForm, art: `ART-${artDigits}` };
     setTransfers(rows => [record, ...rows]);
     setTransferForm({ art: '', qty: '', from: '', to: '', note: '' });
   }
@@ -877,6 +906,7 @@ Pozdrav`);
       state,
       qrRows,
       transfers,
+      sentTransfers,
       counts,
       inventory
     };
@@ -895,6 +925,7 @@ Pozdrav`);
       if (backup.state) setState({ ...DEFAULT_STATE, ...backup.state, savedLoads: backup.state.savedLoads || [] });
       setQrRows(backup.qrRows || []);
       setTransfers(backup.transfers || []);
+      setSentTransfers(backup.sentTransfers || []);
       setCounts(backup.counts || []);
       setInventory(backup.inventory || []);
       alert('Backup je vraćen.');
@@ -998,11 +1029,11 @@ Pozdrav`);
     </section>}
 
     {appView === 'load' && <>
-      <ModuleHeader><div className={validation.valid ? 'status ok' : 'status bad'}>{validation.valid ? 'Sve staje' : 'NEMA MESTA'}</div></ModuleHeader>
+      <ModuleHeader><div className={validation.valid ? 'status ok' : 'status bad'}>{validation.valid ? 'Sve staje' : 'NEMA MESTA'} · Ukupno boksova: {totalPlacedBoxCount}</div></ModuleHeader>
       <section className="metrics">
         <label>Dužina prikolice <input type="number" step="0.1" value={state.trailer.length} onChange={e => updateTrailer('length', e.target.value)} /> m</label>
         <label>Širina / dubina prikolice <input type="number" step="0.05" value={state.trailer.width} onChange={e => updateTrailer('width', e.target.value)} /> m</label>
-        <div><b>{placed.length}</b> placed / <b>{unplaced.length}</b> unplaced</div>
+        <div><b>{placed.length}</b> buntova / <b>{totalPlacedBoxCount}</b> boksova</div>
         <div><b>{validation.usedArea.toFixed(2)}m²</b> used / {validation.trailerArea.toFixed(2)}m²</div>
         <div><b>{Math.round((validation.usedArea / validation.trailerArea) * 100) || 0}%</b> area used</div>
       </section>
@@ -1026,24 +1057,25 @@ Pozdrav`);
               <div className="lane-line lane-line-2"></div>
               {placed.map(b => {
                 const invalid = validation.invalidIds.has(b.id);
-                const w = toPx(b.rotated ? b.width : b.length);
-                const h = toPx(b.rotated ? b.length : b.width);
+                const w = toPx(b.length);
+                const h = toPx(b.width);
                 return <div key={b.id} onPointerDown={e => startDrag(e, b)} className={`box placed ${invalid ? 'invalid' : ''}`} style={{ left: toPx(b.x), top: toPx(b.y), width: w, height: h, background: b.color }}>
-                  <strong>{b.name}</strong><span>{formatMeters(b.rotated ? b.width : b.length)} × {formatMeters(b.rotated ? b.length : b.width)}</span>
-                  <div className="box-actions"><button onClick={(e)=>{e.stopPropagation(); rotateBox(b.id)}}><RotateCw size={13}/></button><button onClick={(e)=>{e.stopPropagation(); unplaceBox(b.id)}}><Trash2 size={13}/></button></div>
+                  <strong>{b.name}</strong><span>{formatMeters(b.length)} × {formatMeters(b.width)} · {b.stackCount || 1} boksa</span>
+                  <div className="box-actions"><button onClick={(e)=>{e.stopPropagation(); unplaceBox(b.id)}}><Trash2 size={13}/></button></div>
                 </div>;
               })}
             </div>
           </div>
           <div className="actions">
             <button onClick={saveCurrentLoad}><Save size={16}/> Sačuvaj prikolicu</button>
+            <button onClick={undoLastPlaced} disabled={!lastPlacedBoxId}><ArrowLeft size={16}/> Vrati poslednje</button>
             <button onClick={clearTrailer}><RotateCcw size={16}/> Isprazni prikolicu</button>
             <button className="danger" onClick={resetAll}><Trash2 size={16}/> Resetuj sve</button>
             <span><Save size={15}/> Automatski sačuvano lokalno</span>
           </div>
           <h2>Dostupna roba</h2>
           <div className="available compact-available">
-            {unplaced.map(b => <div key={b.id} onPointerDown={e => mode === 'drag' ? startDrag(e, b) : selectForGrid(b)} className={`box preview ${selectedBoxId === b.id ? 'selected-box' : ''}`} style={{ background: b.color }}><strong>{b.name}</strong><span>{formatMeters(b.length)} × {formatMeters(b.width)}</span>{mode === 'grid' && selectedBoxId === b.id && <em>Izabran</em>}</div>)}
+            {unplaced.map(b => <div key={b.id} onPointerDown={e => mode === 'drag' ? startDrag(e, b) : selectForGrid(b)} className={`box preview ${selectedBoxId === b.id ? 'selected-box' : ''}`} style={{ background: b.color }}><strong>{b.name}</strong><span>{formatMeters(b.length)} × {formatMeters(b.width)} · {b.stackCount || 1} boksa</span>{mode === 'grid' && selectedBoxId === b.id && <em>Izabran</em>}</div>)}
           </div>
         </section>
 
@@ -1052,7 +1084,7 @@ Pozdrav`);
           {state.cargoTypes.map(t => <div className="type-card" key={t.id}>
             <input value={t.name} onChange={e => updateType(t.id, { name: e.target.value })}/>
             <div className="row"><label>Dužina (m) <input type="number" step="0.1" value={t.length} onChange={e => updateType(t.id, { length: e.target.value })}/></label><label>Širina (m) <input type="number" step="0.1" value={t.width} onChange={e => updateType(t.id, { width: e.target.value })}/></label></div>
-            <div className="row"><label>Količina <input type="number" min="0" value={t.qty} onChange={e => updateType(t.id, { qty: e.target.value })}/></label><label>Boja <input type="color" value={t.color} onChange={e => updateType(t.id, { color: e.target.value })}/></label></div>
+            <div className="row"><label>Količina buntova <input type="number" min="0" value={t.qty} onChange={e => updateType(t.id, { qty: e.target.value })}/></label><label>Boksova u buntu <input type="number" min="1" max="4" value={t.stackCount || 4} onChange={e => updateType(t.id, { stackCount: clamp(Number(e.target.value) || 1, 1, 4) })}/></label></div><div className="row"><label>Boja <input type="color" value={t.color} onChange={e => updateType(t.id, { color: e.target.value })}/></label></div>
             <button className="ghost danger" onClick={() => deleteType(t.id)}><Trash2 size={14}/> Obriši tip</button>
           </div>)}
         </aside>
@@ -1104,7 +1136,7 @@ Pozdrav`);
 
     {appView === 'transfer' && <>
       <ModuleHeader />
-      <section className="simple-module"><h2>Dopuna materijala</h2><div className="form-grid"><input placeholder="Art" value={transferForm.art} onChange={e => setTransferForm(f => ({...f, art:e.target.value}))}/><input placeholder="Količina" value={transferForm.qty} onChange={e => setTransferForm(f => ({...f, qty:e.target.value}))}/><input placeholder="Bulk" value={transferForm.from} onChange={e => setTransferForm(f => ({...f, from:e.target.value}))}/><input placeholder="Pick" value={transferForm.to} onChange={e => setTransferForm(f => ({...f, to:e.target.value}))}/><input className="wide" placeholder="Opis / napomena" value={transferForm.note} onChange={e => setTransferForm(f => ({...f, note:e.target.value}))}/><div className="wide form-actions"><button onClick={saveTransferRecord}><Plus size={16}/> Dodaj stavku</button><button className="ghost" onClick={exportTransferExcel} disabled={!transfers.length}><FileSpreadsheet size={16}/> Preuzmi Excel</button><button onClick={emailTransfer} disabled={!transfers.length}><Mail size={16}/> Pošalji mail</button><button className="danger" onClick={clearTransfers} disabled={!transfers.length}><Trash2 size={16}/> Obriši sve</button></div></div><div className="record-list transfer-list">{transfers.length===0 && <p className="empty-card">Još nema dopuna. Unesi podatke i klikni „Dodaj stavku”.</p>}{transfers.map((r, index) => <div className="record-card transfer-card" key={r.id}><div className="transfer-card-head"><b>Dopuna {index + 1}</b><button className="icon-danger" onClick={() => deleteTransferRecord(r.id)}><Trash2 size={15}/></button></div><div className="transfer-lines"><span><strong>Art:</strong> {r.art || '-'}</span><span><strong>Količina:</strong> {r.qty || '-'}</span><span><strong>Bulk:</strong> {r.from || '-'}</span><span><strong>Pick:</strong> {r.to || '-'}</span>{r.note && <span><strong>Napomena:</strong> {r.note}</span>}</div><small>{formatDateTime(r.createdAt)}</small></div>)}</div></section>
+      <section className="simple-module"><h2>Dopuna materijala</h2><div className="form-grid"><label className="art-input-wrap"><span>ART-</span><input placeholder="123456" inputMode="numeric" maxLength="6" value={transferForm.art} onChange={e => setTransferForm(f => ({...f, art:e.target.value.replace(/\D/g, '').slice(0, 6)}))}/></label><input placeholder="Količina" value={transferForm.qty} onChange={e => setTransferForm(f => ({...f, qty:e.target.value}))}/><input placeholder="Bulk" value={transferForm.from} onChange={e => setTransferForm(f => ({...f, from:e.target.value}))}/><input placeholder="Pick" value={transferForm.to} onChange={e => setTransferForm(f => ({...f, to:e.target.value}))}/><input className="wide" placeholder="Opis / napomena" value={transferForm.note} onChange={e => setTransferForm(f => ({...f, note:e.target.value}))}/><div className="wide form-actions"><button onClick={saveTransferRecord}><Plus size={16}/> Dodaj stavku</button><button className="ghost" onClick={exportTransferExcel} disabled={!transfers.length}><FileSpreadsheet size={16}/> Preuzmi Excel</button><button onClick={emailTransfer} disabled={!transfers.length}><Mail size={16}/> Pošalji mail</button><button className="danger" onClick={clearTransfers} disabled={!transfers.length}><Trash2 size={16}/> Obriši sve</button></div></div><div className="record-list transfer-list">{transfers.length===0 && <p className="empty-card">Još nema dopuna. Unesi podatke i klikni „Dodaj stavku”.</p>}{transfers.map((r, index) => <div className="record-card transfer-card" key={r.id}><div className="transfer-card-head"><b>Dopuna {index + 1}</b><button className="icon-danger" onClick={() => deleteTransferRecord(r.id)}><Trash2 size={15}/></button></div><div className="transfer-lines"><span><strong>Art:</strong> {r.art || '-'}</span><span><strong>Količina:</strong> {r.qty || '-'}</span><span><strong>Bulk:</strong> {r.from || '-'}</span><span><strong>Pick:</strong> {r.to || '-'}</span>{r.note && <span><strong>Napomena:</strong> {r.note}</span>}</div><small>{formatDateTime(r.createdAt)}</small></div>)}</div></section>
     </>}
 
     {appView === 'count' && <>
@@ -1150,7 +1182,7 @@ Pozdrav`);
       <ModuleHeader />
       <section className="simple-module history-module">
         <h2>Istorija i pretraga</h2>
-        <div className="history-grid"><div><h3>Prikolice</h3><p>{(state.savedLoads || []).length}</p></div><div><h3>Boksovi</h3><p>{qrRows.length}</p></div><div><h3>Dopune</h3><p>{transfers.length}</p></div><div><h3>Inventar</h3><p>{inventory.length}</p></div></div>
+        <div className="history-grid"><div><h3>Prikolice</h3><p>{(state.savedLoads || []).length}</p></div><div><h3>Boksovi</h3><p>{qrRows.length}</p></div><div><h3>Dopune</h3><p>{transfers.length + sentTransfers.length}</p></div><div><h3>Inventar</h3><p>{inventory.length}</p></div></div>
         <div className="search-panel"><Search size={18}/><input placeholder="Pretraži sve: datum, boks, art, roba, bulk, pick, vozač..." value={historySearch} onChange={e => setHistorySearch(e.target.value)} /></div>
         <div className="backup-actions"><button onClick={downloadBackup}><Download size={16}/> Preuzmi backup</button><label className="upload-btn"><UploadCloud size={16}/> Vrati backup<input type="file" accept="application/json,.json" onChange={e => restoreBackup(e.target.files?.[0])}/></label></div>
         <div className="history-list">
