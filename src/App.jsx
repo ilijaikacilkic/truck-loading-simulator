@@ -9,6 +9,7 @@ import TransferModule from './components/TransferModule.jsx';
 import InventoryModule from './components/InventoryModule.jsx';
 import HistoryModule from './components/HistoryModule.jsx';
 import TimeModule from './components/TimeModule.jsx';
+import ProductionModule from './components/ProductionModule.jsx';
 
 import { STORAGE_KEY, PX_PER_METER, MARIJA_EMAIL, TRANSFER_EMAIL, APP_LOGO_SRC, QR_STORAGE_KEY, QR_PRODUCT_TYPES, TRANSFER_STORAGE_KEY, SENT_TRANSFER_STORAGE_KEY, COUNT_STORAGE_KEY, INVENTORY_STORAGE_KEY, BACKUP_SCHEMA_VERSION, APP_QUOTES, DEFAULT_STATE } from './utils/constants.js';
 import { clamp, rectsOverlap, boxRect, snapBoxPosition, makeBoxesFromTypes, snapToGrid, rangesOverlap, LANES } from './utils/trailerUtils.js';
@@ -607,6 +608,8 @@ Pozdrav`);
     return {
       load: 'Utovar prikolice',
       scan: 'Skeniranje boksova',
+      logistics: 'Logistika',
+      production: 'Otpis materijala',
       transfer: 'Dopuna materijala',
       count: 'Inventar / stanje',
       history: 'Istorija',
@@ -621,7 +624,8 @@ Pozdrav`);
       <div><h3>3. Dopuni opis</h3><p>U tabeli možeš ručno dopisati opis ili napomenu za svaki boks.</p></div>
       <div><h3>4. Pošalji Mariji</h3><p>Dugme otvara mail aplikaciju sa tabelom u tekstu poruke. Ti samo proveriš i klikneš Send.</p></div>
     </div>;
-    if (appView === 'transfer') return <div className="instructions-grid"><div><h3>Dopuna materijala</h3><p>Unesi ART/ID, količinu, poziciju sa koje je uzeto i poziciju na koju je preneto. Sačuvani red ostaje u lokalnoj istoriji uređaja.</p></div></div>;
+    if (appView === 'transfer') return <div className="instructions-grid"><div><h3>Dopuna materijala</h3><p>Unesi ART/ID, količinu, poziciju sa koje je uzeto i poziciju na koju je preneto. Sačuvani red ostaje u lokalnoj istoriji uređaja.</p></div><div><h3>Dnevni refil</h3><p>U dnevnom refilu učitaj Excel, proveri količine, dopiši napomenu i preuzmi ili podeli završni Excel.</p></div></div>;
+    if (appView === 'production') return <div className="instructions-grid"><div><h3>Otpis materijala</h3><p>Ovaj deo je namenjen proizvodnji. Ovde ćemo dodati formu za otpis materijala kada definišemo tačna polja.</p></div></div>;
     if (appView === 'count') return <div className="instructions-grid"><div><h3>Inventar / stanje</h3><p>Dodaj artikal, količinu, poziciju i slike. Sve ostaje lokalno i može da se pronađe kroz istoriju i pretragu.</p></div><div><h3>Brojanje</h3><p>Donji deo ekrana možeš koristiti za brza brojanja stanja materijala po pozicijama.</p></div></div>;
     return <div className="instructions-grid">
       <div><h3>1. Izaberi način rada</h3><p><b>Drag</b> služi za ručno pomeranje robe. <b>Grid</b> dodaje robu u jednu od tri trake prikolice.</p></div>
@@ -691,6 +695,7 @@ Pozdrav`);
 
     <HistoryModule ctx={ctx} />
     <TimeModule ctx={ctx} />
+    <ProductionModule ctx={ctx} />
   </main>;
 
 }

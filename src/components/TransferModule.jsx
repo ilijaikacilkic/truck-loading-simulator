@@ -1,9 +1,11 @@
 import React, { useRef, useState } from 'react';
-import { Trash2, Plus, FileSpreadsheet, Mail, UploadCloud, ClipboardList, RotateCcw } from 'lucide-react';
+import { Trash2, Plus, FileSpreadsheet, Mail, UploadCloud, ClipboardList, RotateCcw, Share2 } from 'lucide-react';
 import { TRANSFER_EMAIL } from '../utils/constants.js';
 import {
   downloadDailyRefillXlsx,
   formatDailyRefillRowsForEmail,
+  makeDailyRefillFilename,
+  makeDailyRefillXlsxFile,
   parseDailyRefillXlsx,
   todayIsoDate,
   todaySrDate
@@ -32,7 +34,7 @@ export default function TransferModule({ ctx }) {
       const rows = await parseDailyRefillXlsx(file);
       setDailyRows(rows);
       setDailyFileName(file.name);
-      if (!rows.length) setDailyUploadError('Excel je učitan, ali nisu pronađene stavke za refil.');
+      if (!rows.length) setDailyUploadError('Excel je učitan, ali nisu pronađene stavke za refil u Sheet 2.');
     } catch (err) {
       console.error(err);
       setDailyRows([]);
@@ -62,6 +64,32 @@ export default function TransferModule({ ctx }) {
     downloadDailyRefillXlsx(dailyRows);
   }
 
+  async function shareDailyRefill() {
+    if (!dailyRows.length) {
+      alert('Prvo učitaj Excel fajl za dnevni refil.');
+      return;
+    }
+    const file = makeDailyRefillXlsxFile(dailyRows);
+    const shareData = {
+      title: 'Dnevni refil',
+      text: `Dnevni refil - ${todaySrDate()}`,
+      files: [file]
+    };
+    try {
+      if (navigator.canShare?.({ files: [file] }) && navigator.share) {
+        await navigator.share(shareData);
+      } else {
+        downloadDailyRefillXlsx(dailyRows);
+        alert('Ovaj browser ne podržava direktno deljenje fajla. Excel je skinut, pa ga dodaj ručno u mail.');
+      }
+    } catch (err) {
+      if (err?.name !== 'AbortError') {
+        console.error(err);
+        alert('Deljenje nije uspelo. Excel možeš skinuti dugmetom „Preuzmi Excel”.');
+      }
+    }
+  }
+
   function emailDailyRefill() {
     if (!dailyRows.length) {
       alert('Prvo učitaj Excel fajl za dnevni refil.');
@@ -72,7 +100,7 @@ export default function TransferModule({ ctx }) {
     const body = encodeURIComponent(`Dnevni refil
 Datum: ${todaySrDate()}
 
-Skinut je Excel fajl: dnevni-refil-${todayIsoDate()}.xlsx
+Skinut je Excel fajl: ${makeDailyRefillFilename()}
 
 U prilogu treba dodati preuzeti Excel fajl.
 
@@ -95,7 +123,7 @@ Pozdrav`);
       <div className="daily-refill-head">
         <div>
           <h2>Dnevni refil</h2>
-          <p>Učitaj Excel iz maila. Aplikacija uzima ART, opis, bulk lokaciju, količinu za prenos i pick lokaciju.</p>
+          <p>Učitaj Excel iz maila. Aplikacija čita samo <b>Sheet 2</b> i uzima ART, opis, bulk, količinu za prenos i pick.</p>
         </div>
         {dailyRows.length > 0 && <div className="daily-refill-count"><span>Stavki</span><b>{dailyRows.length}</b></div>}
       </div>
@@ -120,11 +148,12 @@ Pozdrav`);
         <div className="daily-refill-toolbar">
           <div>
             <strong>{dailyFileName || 'Učitani Excel'}</strong>
-            <small> Možeš dopisati napomene pre slanja.</small>
+            <small> Završni Excel se skida kao ART | Bulk | Količina | Pick.</small>
           </div>
           <div className="daily-refill-actions">
             <button className="ghost" onClick={() => fileInputRef.current?.click()}><UploadCloud size={16}/> Drugi Excel</button>
             <button className="ghost" onClick={downloadDailyRefill}><FileSpreadsheet size={16}/> Preuzmi Excel</button>
+            <button className="ghost" onClick={shareDailyRefill}><Share2 size={16}/> Podeli Excel</button>
             <button onClick={emailDailyRefill}><Mail size={16}/> Pošalji mail</button>
             <button className="danger" onClick={clearDailyRefill}><Trash2 size={16}/> Obriši</button>
           </div>
@@ -137,31 +166,27 @@ Pozdrav`);
           />
         </div>
 
-        <div className="daily-refill-table-wrap">
-          <table className="daily-refill-table">
-            <thead>
-              <tr>
-                <th>#</th>
-                <th>ART</th>
-                <th>Opis materijala</th>
-                <th>Bulk lokacija</th>
-                <th>Količina za prenos</th>
-                <th>Pick lokacija</th>
-                <th>Napomena</th>
-              </tr>
-            </thead>
-            <tbody>
-              {dailyRows.map((row, index) => <tr key={row.id}>
-                <td data-label="#">{index + 1}</td>
-                <td data-label="ART"><input value={row.art} onChange={e => updateDailyRow(row.id, { art: e.target.value })}/></td>
-                <td data-label="Opis"><textarea value={row.description} onChange={e => updateDailyRow(row.id, { description: e.target.value })}/></td>
-                <td data-label="Bulk"><input value={row.bulkLocation} onChange={e => updateDailyRow(row.id, { bulkLocation: e.target.value })}/></td>
-                <td data-label="Količina"><input value={row.transferQty} onChange={e => updateDailyRow(row.id, { transferQty: e.target.value })}/></td>
-                <td data-label="Pick"><input value={row.pickLocation} onChange={e => updateDailyRow(row.id, { pickLocation: e.target.value })}/></td>
-                <td data-label="Napomena"><textarea placeholder="Napomena..." value={row.note} onChange={e => updateDailyRow(row.id, { note: e.target.value })}/></td>
-              </tr>)}
-            </tbody>
-          </table>
+        <div className="daily-refill-list">
+          {dailyRows.map((row, index) => <article className="daily-refill-card" key={row.id}>
+            <div className="daily-card-index">{index + 1}</div>
+            <div className="daily-card-main">
+              <div className="daily-card-top">
+                <strong>{row.art || '-'}</strong>
+                <span>{row.bulkLocation || '-'} → {row.pickLocation || '-'}</span>
+              </div>
+              {row.description && <p className="daily-card-description">{row.description}</p>}
+              <div className="daily-card-inputs">
+                <label>
+                  <span>Količina</span>
+                  <input value={row.transferQty} onChange={e => updateDailyRow(row.id, { transferQty: e.target.value })}/>
+                </label>
+                <label className="daily-note-input">
+                  <span>Napomena</span>
+                  <input placeholder="Napomena..." value={row.note} onChange={e => updateDailyRow(row.id, { note: e.target.value })}/>
+                </label>
+              </div>
+            </div>
+          </article>)}
         </div>
       </>}
     </section> : <section className="simple-module">

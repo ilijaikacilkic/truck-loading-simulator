@@ -26,16 +26,54 @@ export function columnName(index) {
   }
   return name;
 }
-export function makeSheetXml(rows) {
+
+export function makeSheetXml(rows, options = {}) {
+  const styleForCell = typeof options.styleForCell === 'function' ? options.styleForCell : null;
   const sheetRows = rows.map((row, rIdx) => {
     const cells = row.map((value, cIdx) => {
       const ref = `${columnName(cIdx)}${rIdx + 1}`;
-      return `<c r="${ref}" t="inlineStr"><is><t>${escapeSheetXml(value)}</t></is></c>`;
+      const styleIndex = styleForCell ? styleForCell(rIdx, cIdx, value, row) : null;
+      const styleAttr = Number.isFinite(styleIndex) ? ` s="${styleIndex}"` : '';
+      return `<c r="${ref}"${styleAttr} t="inlineStr"><is><t>${escapeSheetXml(value)}</t></is></c>`;
     }).join('');
     return `<row r="${rIdx + 1}">${cells}</row>`;
   }).join('');
   return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetData>${sheetRows}</sheetData></worksheet>`;
 }
+
+export function makeWorkbookStylesXml() {
+  return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
+  <fonts count="2">
+    <font><sz val="11"/><color theme="1"/><name val="Calibri"/><family val="2"/></font>
+    <font><b/><sz val="11"/><color rgb="FF0F3A66"/><name val="Calibri"/><family val="2"/></font>
+  </fonts>
+  <fills count="7">
+    <fill><patternFill patternType="none"/></fill>
+    <fill><patternFill patternType="gray125"/></fill>
+    <fill><patternFill patternType="solid"><fgColor rgb="FFE0F2FE"/><bgColor indexed="64"/></patternFill></fill>
+    <fill><patternFill patternType="solid"><fgColor rgb="FFF0F9FF"/><bgColor indexed="64"/></patternFill></fill>
+    <fill><patternFill patternType="solid"><fgColor rgb="FFEFF6FF"/><bgColor indexed="64"/></patternFill></fill>
+    <fill><patternFill patternType="solid"><fgColor rgb="FFF0FDF4"/><bgColor indexed="64"/></patternFill></fill>
+    <fill><patternFill patternType="solid"><fgColor rgb="FFFFF7ED"/><bgColor indexed="64"/></patternFill></fill>
+  </fills>
+  <borders count="2">
+    <border><left/><right/><top/><bottom/><diagonal/></border>
+    <border><left style="thin"><color rgb="FFBFDBFE"/></left><right style="thin"><color rgb="FFBFDBFE"/></right><top style="thin"><color rgb="FFBFDBFE"/></top><bottom style="thin"><color rgb="FFBFDBFE"/></bottom><diagonal/></border>
+  </borders>
+  <cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs>
+  <cellXfs count="6">
+    <xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/>
+    <xf numFmtId="0" fontId="1" fillId="2" borderId="1" xfId="0" applyFont="1" applyFill="1" applyBorder="1"/>
+    <xf numFmtId="0" fontId="0" fillId="3" borderId="1" xfId="0" applyFill="1" applyBorder="1"/>
+    <xf numFmtId="0" fontId="0" fillId="4" borderId="1" xfId="0" applyFill="1" applyBorder="1"/>
+    <xf numFmtId="0" fontId="0" fillId="5" borderId="1" xfId="0" applyFill="1" applyBorder="1"/>
+    <xf numFmtId="0" fontId="0" fillId="6" borderId="1" xfId="0" applyFill="1" applyBorder="1"/>
+  </cellXfs>
+  <cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles>
+</styleSheet>`;
+}
+
 export function crc32(str) {
   let crc = -1;
   for (let i = 0; i < str.length; i++) {
@@ -89,16 +127,22 @@ export function makeZip(files) {
   chunks.push(end);
   return new Blob(chunks, { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
 }
-export function downloadXlsxFile(filename, sheetRows, sheetName = 'Sheet1') {
+
+export function createXlsxBlob(sheetRows, sheetName = 'Sheet1', options = {}) {
   const safeSheetName = String(sheetName || 'Sheet1').replace(/[\\/*?:\[\]]/g, ' ').slice(0, 31) || 'Sheet1';
+  const useStyles = Boolean(options.styles);
   const files = [
-    { name: '[Content_Types].xml', content: '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/><Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/></Types>' },
+    { name: '[Content_Types].xml', content: `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/><Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>${useStyles ? '<Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/>' : ''}</Types>` },
     { name: '_rels/.rels', content: '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>' },
     { name: 'xl/workbook.xml', content: `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets><sheet name="${escapeSheetXml(safeSheetName)}" sheetId="1" r:id="rId1"/></sheets></workbook>` },
-    { name: 'xl/_rels/workbook.xml.rels', content: '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/></Relationships>' },
-    { name: 'xl/worksheets/sheet1.xml', content: makeSheetXml(sheetRows) },
+    { name: 'xl/_rels/workbook.xml.rels', content: `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/>${useStyles ? '<Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/>' : ''}</Relationships>` },
+    { name: 'xl/worksheets/sheet1.xml', content: makeSheetXml(sheetRows, options) },
   ];
-  const blob = makeZip(files);
+  if (useStyles) files.push({ name: 'xl/styles.xml', content: makeWorkbookStylesXml() });
+  return makeZip(files);
+}
+
+export function downloadBlob(filename, blob) {
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
@@ -108,6 +152,11 @@ export function downloadXlsxFile(filename, sheetRows, sheetName = 'Sheet1') {
   document.body.removeChild(a);
   URL.revokeObjectURL(url);
 }
+
+export function downloadXlsxFile(filename, sheetRows, sheetName = 'Sheet1', options = {}) {
+  downloadBlob(filename, createXlsxBlob(sheetRows, sheetName, options));
+}
+
 export function downloadScanningXlsx(rows) {
   const dateIso = todayIsoDate();
   const rowsForSheet = [
@@ -152,14 +201,7 @@ export function downloadQrCsv(rows) {
     .map(cols => cols.map(value => `"${String(value).replace(/"/g, '""')}"`).join(';'))
     .join('\n');
   const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8;' });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = `qr-tabela-${new Date().toISOString().slice(0, 10)}.csv`;
-  document.body.appendChild(a);
-  a.click();
-  document.body.removeChild(a);
-  URL.revokeObjectURL(url);
+  downloadBlob(`qr-tabela-${new Date().toISOString().slice(0, 10)}.csv`, blob);
 }
 
 function readUint16(view, offset) { return view.getUint16(offset, true); }
@@ -249,7 +291,46 @@ function cellText(cell, sharedStrings) {
   return raw;
 }
 
-async function parseXlsxRows(file) {
+function normalizeSheetName(name) {
+  return String(name || '').replace(/\s+/g, '').toLowerCase();
+}
+
+function resolveWorksheetTarget(target) {
+  const clean = String(target || '').replace(/^\//, '');
+  if (clean.startsWith('xl/')) return clean;
+  return `xl/${clean}`.replace(/\/\.\//g, '/');
+}
+
+async function findWorksheetPath(entries, preferredSheetName) {
+  if (!preferredSheetName) {
+    return entries.has('xl/worksheets/sheet1.xml')
+      ? 'xl/worksheets/sheet1.xml'
+      : Array.from(entries.keys()).find(name => /^xl\/worksheets\/sheet\d+\.xml$/.test(name));
+  }
+
+  const workbookText = await readZipText(entries, 'xl/workbook.xml');
+  const relsText = await readZipText(entries, 'xl/_rels/workbook.xml.rels');
+  if (!workbookText || !relsText) throw new Error('Excel fajl nema workbook podatke.');
+
+  const workbook = parseXml(workbookText);
+  const rels = parseXml(relsText);
+  const relMap = new Map(localNameElements(rels, 'Relationship').map(rel => [rel.getAttribute('Id'), rel.getAttribute('Target')]));
+  const preferred = normalizeSheetName(preferredSheetName);
+  const fallback = preferred === 'sheet2' ? 'sheet2' : '';
+  const sheet = localNameElements(workbook, 'sheet').find(item => {
+    const current = normalizeSheetName(item.getAttribute('name'));
+    return current === preferred || (fallback && current === fallback);
+  });
+
+  if (!sheet) throw new Error(`Nije pronađen sheet "${preferredSheetName}". Proveri tačan naziv sheeta u Excel fajlu.`);
+  const relId = sheet.getAttribute('r:id') || sheet.getAttribute('id');
+  const target = relMap.get(relId);
+  const path = resolveWorksheetTarget(target);
+  if (!entries.has(path)) throw new Error(`Sheet "${preferredSheetName}" postoji, ali aplikacija ne može da pronađe njegov sadržaj.`);
+  return path;
+}
+
+async function parseXlsxRows(file, preferredSheetName = '') {
   const buffer = await file.arrayBuffer();
   const entries = await readZipEntries(buffer);
   const sharedText = await readZipText(entries, 'xl/sharedStrings.xml');
@@ -257,10 +338,8 @@ async function parseXlsxRows(file) {
     ? localNameElements(parseXml(sharedText), 'si').map(si => localNameElements(si, 't').map(t => t.textContent || '').join(''))
     : [];
 
-  const sheetName = entries.has('xl/worksheets/sheet1.xml')
-    ? 'xl/worksheets/sheet1.xml'
-    : Array.from(entries.keys()).find(name => /^xl\/worksheets\/sheet\d+\.xml$/.test(name));
-  if (!sheetName) throw new Error('Nije pronađen prvi sheet u Excel fajlu.');
+  const sheetName = await findWorksheetPath(entries, preferredSheetName);
+  if (!sheetName) throw new Error('Nije pronađen sheet u Excel fajlu.');
   const sheetText = await readZipText(entries, sheetName);
   const sheet = parseXml(sheetText);
 
@@ -295,7 +374,7 @@ export async function parseDailyRefillXlsx(file) {
   if (!/\.xlsx$/i.test(file.name)) {
     throw new Error('Za sada je podržan .xlsx Excel fajl.');
   }
-  const rows = (await parseXlsxRows(file)).filter(row => row.some(cell => String(cell || '').trim()));
+  const rows = (await parseXlsxRows(file, 'Sheet 2')).filter(row => row.some(cell => String(cell || '').trim()));
   if (!rows.length) return [];
   const dataRows = looksLikeHeader(rows[0]) ? rows.slice(1) : rows;
   return dataRows
@@ -303,24 +382,46 @@ export async function parseDailyRefillXlsx(file) {
     .filter(row => row.art || row.description || row.bulkLocation || row.transferQty || row.pickLocation);
 }
 
-export function downloadDailyRefillXlsx(rows) {
-  const dateIso = todayIsoDate();
-  const rowsForSheet = [
-    ['Dnevni refil', '', '', '', '', ''],
-    ['Datum', todaySrDate(), '', '', '', ''],
-    [],
-    ['#', 'ART', 'Opis materijala', 'Bulk lokacija', 'Količina za prenos', 'Pick lokacija', 'Napomena'],
-    ...rows.map((row, index) => [
-      index + 1,
+export function makeDailyRefillRows(rows) {
+  return [
+    ['ART', 'Bulk', 'Količina', 'Pick'],
+    ...rows.map(row => [
       row.art || '',
-      row.description || '',
       row.bulkLocation || '',
       row.transferQty || '',
-      row.pickLocation || '',
-      row.note || ''
+      row.pickLocation || ''
     ])
   ];
-  downloadXlsxFile(`dnevni-refil-${dateIso}.xlsx`, rowsForSheet, 'Dnevni refil');
+}
+
+export function makeDailyRefillFilename() {
+  return `dnevni-refil-${todayIsoDate()}.xlsx`;
+}
+
+export function makeDailyRefillXlsxBlob(rows) {
+  const sheetRows = makeDailyRefillRows(rows);
+  return createXlsxBlob(sheetRows, 'Dnevni refil', {
+    styles: true,
+    styleForCell: (rowIndex) => {
+      if (rowIndex === 0) return 1;
+      return 2 + ((rowIndex - 1) % 4);
+    }
+  });
+}
+
+export function makeDailyRefillXlsxFile(rows) {
+  const filename = makeDailyRefillFilename();
+  const blob = makeDailyRefillXlsxBlob(rows);
+  try {
+    return new File([blob], filename, { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+  } catch {
+    blob.name = filename;
+    return blob;
+  }
+}
+
+export function downloadDailyRefillXlsx(rows) {
+  downloadBlob(makeDailyRefillFilename(), makeDailyRefillXlsxBlob(rows));
 }
 
 export function formatDailyRefillRowsForEmail(rows) {

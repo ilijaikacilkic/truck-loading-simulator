@@ -1,31 +1,40 @@
 import React from 'react';
-import { Trash2, Plus, RotateCcw, Save, X, MousePointer2, Grid3X3, Upload, Copy, Send, FileSpreadsheet, ArrowLeft, Clock3, Search, Download, UploadCloud, Image as ImageIcon } from 'lucide-react';
-
 
 export default function HomeScreen({ ctx }) {
-  const { appView, APP_LOGO_SRC, APP_QUOTES, quoteIndex, openModule,
-  showInstructions, setShowInstructions, moduleTitle, instructionContent,
-  sharedLoad, setSharedLoad, validation, totalPlacedBoxCount, state,
-  updateTrailer, placed, unplaced, mode, setMode, selectedBoxId,
-  selectForGrid, startDrag, placeSelectedAt, trailerRef, trailerStyle,
-  toPx, formatMeters, unplaceBox, saveCurrentLoad, undoLastPlaced,
-  lastPlacedBoxId, clearTrailer, resetAll, updateType, deleteType, addType,
-  updateSavedLoad, uploadSavedPhotos, removeSavedPhoto, copyShareLink,
-  emailShare, loadSavedLoad, deleteSavedLoad, qrMode, pendingQr,
-  manualQrValue, setManualQrValue, addManualQr, scannerError, videoRef,
-  QR_PRODUCT_TYPES, confirmQrType, setPendingQr, qrRows, emailMarija,
-  copyQrTable, downloadScanningXlsx, setQrRows, updateQrRow, deleteQrRow,
-  transferForm, setTransferForm, saveTransferRecord, exportTransferExcel,
-  emailTransfer, transfers, clearTransfers, deleteTransferRecord,
-  filteredInventory, inventoryForm, setInventoryForm, saveInventoryItem,
-  inventorySearch, setInventorySearch, updateInventoryItem, deleteInventoryItem,
-  uploadInventoryPhotos, removeInventoryPhoto, countForm, setCountForm,
-  saveCountRecord, counts, historySearch, setHistorySearch, filteredHistory,
-  downloadBackup, restoreBackup, now, workInfo, formatDateTime, ModuleHeader } = ctx;
-  return appView === 'home' && <section className="home-screen">
+  const { appView, APP_LOGO_SRC, APP_QUOTES, quoteIndex, openModule } = ctx;
+
+  if (appView === 'home') {
+    return <section className="home-screen home-choice-screen">
       <div className="home-logo">
         <img className="app-logo-img" src={APP_LOGO_SRC} alt="Logo aplikacije" />
         <h1>Verano Logistics</h1>
+      </div>
+
+      <div className="home-choice-grid">
+        <button className="home-choice-tile production-choice" onClick={() => openModule('production')}>
+          <span className="tile-icon">🛠️</span>
+          <b>PROIZVODNJA</b>
+          <small>Otpis materijala</small>
+        </button>
+        <button className="home-choice-tile logistics-choice" onClick={() => openModule('logistics')}>
+          <span className="tile-icon">🧠</span>
+          <b>LOGISTIKA</b>
+          <small>Utovar, skeniranje, dopuna, istorija</small>
+        </button>
+      </div>
+
+      <div className="quote-card quote-only">
+        <p>“{APP_QUOTES[quoteIndex]}”</p>
+      </div>
+    </section>;
+  }
+
+  if (appView === 'logistics') {
+    return <section className="home-screen logistics-screen">
+      <div className="home-logo compact-home-logo">
+        <img className="app-logo-img" src={APP_LOGO_SRC} alt="Logo aplikacije" />
+        <h1>Logistika</h1>
+        <button className="ghost home-back-choice" onClick={() => openModule('home')}>Nazad</button>
       </div>
 
       <div className="home-grid">
@@ -41,4 +50,7 @@ export default function HomeScreen({ ctx }) {
         <p>“{APP_QUOTES[quoteIndex]}”</p>
       </div>
     </section>;
+  }
+
+  return null;
 }
