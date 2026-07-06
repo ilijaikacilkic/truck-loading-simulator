@@ -65,14 +65,21 @@ export default function App() {
   const pendingQrRef = useRef('');
   const [manualQrValue, setManualQrValue] = useState('');
   const [scannerError, setScannerError] = useState('');
+  const [qrScanKind, setQrScanKind] = useState('product');
+  const [qrScanMessage, setQrScanMessage] = useState('');
   const videoRef = useRef(null);
   const streamRef = useRef(null);
   const scanLoopRef = useRef(null);
   const trailerRef = useRef(null);
+  const qrScanKindRef = useRef('product');
+  const qrRowsRef = useRef([]);
+  const lastQrScanRef = useRef({ value: '', at: 0 });
+  const qrMessageTimerRef = useRef(null);
 
   useEffect(() => { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); }, [state]);
   useEffect(() => { pendingQrRef.current = pendingQr; }, [pendingQr]);
-  useEffect(() => { localStorage.setItem(QR_STORAGE_KEY, JSON.stringify(qrRows)); }, [qrRows]);
+  useEffect(() => { qrScanKindRef.current = qrScanKind; }, [qrScanKind]);
+  useEffect(() => { qrRowsRef.current = qrRows; localStorage.setItem(QR_STORAGE_KEY, JSON.stringify(qrRows)); }, [qrRows]);
   useEffect(() => { localStorage.setItem(TRANSFER_STORAGE_KEY, JSON.stringify(transfers)); }, [transfers]);
   useEffect(() => { localStorage.setItem(SENT_TRANSFER_STORAGE_KEY, JSON.stringify(sentTransfers)); }, [sentTransfers]);
   useEffect(() => { localStorage.setItem(COUNT_STORAGE_KEY, JSON.stringify(counts)); }, [counts]);
@@ -123,14 +130,10 @@ export default function App() {
         const detector = new window.BarcodeDetector({ formats: ['qr_code'] });
         const scan = async () => {
           if (cancelled || !videoRef.current) return;
-          if (pendingQrRef.current) { scanLoopRef.current = requestAnimationFrame(scan); return; }
           try {
             const codes = await detector.detect(videoRef.current);
             const value = codes?.[0]?.rawValue?.trim();
-            if (value) {
-              setPendingQr(value);
-              return;
-            }
+            if (value) handleScannedQr(value);
           } catch {}
           scanLoopRef.current = requestAnimationFrame(scan);
         };
@@ -191,8 +194,8 @@ export default function App() {
       type: 'Skeniranje',
       icon: '📦',
       createdAt: row.createdAt,
-      title: `Boks ${row.boxNumber || index + 1}`,
-      summary: `${row.productType || '-'} · ${row.description || 'Bez opisa'}`,
+      title: `CPR ${row.cpr || row.boxNumber || index + 1}`,
+      summary: `Boks: ${row.boxNumber || '-'} · ${row.productType || '-'}${row.description ? ` · ${row.description}` : ''}`,
       searchText: JSON.stringify(row)
     }));
     const transferItems = [...transfers, ...sentTransfers].map(row => ({
@@ -413,22 +416,81 @@ Težina tereta: ${load.cargoWeight || '-'}`);
   }
 
 
+  function showQrMessage(message) {
+    setQrScanMessage(message);
+    if (qrMessageTimerRef.current) clearTimeout(qrMessageTimerRef.current);
+    qrMessageTimerRef.current = setTimeout(() => setQrScanMessage(''), 2200);
+  }
+
+  function makeId() {
+    return crypto?.randomUUID?.() || `${Date.now()}-${Math.random()}`;
+  }
+
+  function normalizeQrValue(value) {
+    return String(value || '').trim();
+  }
+
+  function handleScannedQr(rawValue) {
+    const value = normalizeQrValue(rawValue);
+    if (!value) return;
+    const nowMs = Date.now();
+    const last = lastQrScanRef.current;
+    if (last.value === value && nowMs - last.at < 1000) return;
+    lastQrScanRef.current = { value, at: nowMs };
+
+    if (navigator.vibrate) navigator.vibrate(35);
+    setScannerError('');
+
+    if (qrScanKindRef.current === 'box') {
+      setQrRows(rows => {
+        const waiting = rows.filter(row => !row.boxNumber);
+        if (!waiting.length) {
+          showQrMessage('Nema CPR-ova koji čekaju boks. Prvo skeniraj proizvode.');
+          return rows;
+        }
+        showQrMessage(`${waiting.length} CPR povezano sa boksom ${value}`);
+        return rows.map(row => !row.boxNumber ? { ...row, boxNumber: value, updatedAt: new Date().toISOString() } : row);
+      });
+      return;
+    }
+
+    setQrRows(rows => {
+      const exists = rows.some(row => normalizeQrValue(row.cpr || row.boxNumber).toLowerCase() === value.toLowerCase());
+      if (exists) {
+        showQrMessage(`Već skenirano: ${value}`);
+        return rows;
+      }
+      showQrMessage(`Skenirano: ${value}`);
+      return [...rows, {
+        id: makeId(),
+        cpr: value,
+        boxNumber: '',
+        productType: '',
+        description: '',
+        createdAt: new Date().toISOString(),
+      }];
+    });
+  }
+
   function addManualQr() {
     const value = manualQrValue.trim();
     if (!value) return;
-    setPendingQr(value);
+    handleScannedQr(value);
     setManualQrValue('');
   }
+
+  function applyQrProductType(productType) {
+    setQrRows(rows => rows.map(row => row.productType ? row : { ...row, productType, updatedAt: new Date().toISOString() }));
+    showQrMessage(`Tip robe dodat: ${productType}`);
+  }
+
+  function undoLastQrRow() {
+    setQrRows(rows => rows.slice(0, -1));
+    showQrMessage('Poslednji red je obrisan.');
+  }
+
   function confirmQrType(productType) {
-    if (!pendingQr) return;
-    const newRow = {
-      id: crypto.randomUUID(),
-      boxNumber: pendingQr,
-      productType,
-      description: '',
-      createdAt: new Date().toISOString(),
-    };
-    setQrRows(rows => [...rows, newRow]);
+    applyQrProductType(productType);
     setPendingQr('');
   }
   function updateQrRow(id, patch) {
@@ -495,6 +557,7 @@ Pozdrav`);
     setAppView(view);
     setQrMode(view === 'scan');
     setPendingQr('');
+    setQrScanMessage('');
     setShowInstructions(false);
     if (view === 'load') {
       setShowLoadIntro(true);
@@ -625,7 +688,7 @@ Pozdrav`);
       <div><h3>4. Pošalji Mariji</h3><p>Dugme otvara mail aplikaciju sa tabelom u tekstu poruke. Ti samo proveriš i klikneš Send.</p></div>
     </div>;
     if (appView === 'transfer') return <div className="instructions-grid"><div><h3>Dopuna materijala</h3><p>Unesi ART/ID, količinu, poziciju sa koje je uzeto i poziciju na koju je preneto. Sačuvani red ostaje u lokalnoj istoriji uređaja.</p></div><div><h3>Dnevni refil</h3><p>U dnevnom refilu učitaj Excel, proveri količine, dopiši napomenu i preuzmi ili podeli završni Excel.</p></div></div>;
-    if (appView === 'production') return <div className="instructions-grid"><div><h3>Otpis materijala</h3><p>Ovaj deo je namenjen proizvodnji. Ovde ćemo dodati formu za otpis materijala kada definišemo tačna polja.</p></div></div>;
+    if (appView === 'production') return <div className="instructions-grid"><div><h3>Otpis</h3><p>Unesi pick lokaciju i količinu za otpis. Ako istu pick lokaciju dodaš više puta, aplikacija automatski sabira ukupnu metražu.</p></div><div><h3>Preuzmi Excel</h3><p>Na kraju preuzmi Excel sa dve kolone: Pick lokacija i ukupna metraža.</p></div></div>;
     if (appView === 'count') return <div className="instructions-grid"><div><h3>Inventar / stanje</h3><p>Dodaj artikal, količinu, poziciju i slike. Sve ostaje lokalno i može da se pronađe kroz istoriju i pretragu.</p></div><div><h3>Brojanje</h3><p>Donji deo ekrana možeš koristiti za brza brojanja stanja materijala po pozicijama.</p></div></div>;
     return <div className="instructions-grid">
       <div><h3>1. Izaberi način rada</h3><p><b>Drag</b> služi za ručno pomeranje robe. <b>Grid</b> dodaje robu u jednu od tri trake prikolice.</p></div>
@@ -667,6 +730,7 @@ Pozdrav`);
     updateSavedLoad, uploadSavedPhotos, removeSavedPhoto, copyShareLink,
     emailShare, loadSavedLoad, deleteSavedLoad, qrMode, pendingQr,
     manualQrValue, setManualQrValue, addManualQr, scannerError, videoRef,
+    qrScanKind, setQrScanKind, qrScanMessage, applyQrProductType, undoLastQrRow,
     QR_PRODUCT_TYPES, confirmQrType, setPendingQr, qrRows, emailMarija,
     copyQrTable, downloadScanningXlsx, setQrRows, updateQrRow, deleteQrRow,
     transferForm, setTransferForm, saveTransferRecord, exportTransferExcel,

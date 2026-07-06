@@ -7,7 +7,6 @@ import {
   makeDailyRefillFilename,
   makeDailyRefillXlsxFile,
   parseDailyRefillXlsx,
-  todayIsoDate,
   todaySrDate
 } from '../utils/excelUtils.js';
 
@@ -48,6 +47,23 @@ export default function TransferModule({ ctx }) {
 
   function updateDailyRow(id, patch) {
     setDailyRows(rows => rows.map(row => row.id === id ? { ...row, ...patch } : row));
+  }
+
+  function addEmptyDailyRow() {
+    setDailyRows(rows => [...rows, {
+      id: crypto?.randomUUID?.() || `${Date.now()}-${Math.random()}`,
+      art: '',
+      description: '',
+      bulkLocation: '',
+      transferQty: '',
+      pickLocation: '',
+      note: '',
+      createdAt: new Date().toISOString()
+    }]);
+  }
+
+  function deleteDailyRow(id) {
+    setDailyRows(rows => rows.filter(row => row.id !== id));
   }
 
   function clearDailyRefill() {
@@ -97,18 +113,7 @@ export default function TransferModule({ ctx }) {
     }
     downloadDailyRefillXlsx(dailyRows);
     const subject = encodeURIComponent(`Dnevni refil - ${todaySrDate()}`);
-    const body = encodeURIComponent(`Dnevni refil
-Datum: ${todaySrDate()}
-
-Skinut je Excel fajl: ${makeDailyRefillFilename()}
-
-U prilogu treba dodati preuzeti Excel fajl.
-
-Pregled stavki:
-
-${formatDailyRefillRowsForEmail(dailyRows)}
-
-Pozdrav`);
+    const body = encodeURIComponent(`Dnevni refil\nDatum: ${todaySrDate()}\n\nSkinut je Excel fajl: ${makeDailyRefillFilename()}\n\nU prilogu treba dodati preuzeti Excel fajl.\n\nPregled stavki:\n\n${formatDailyRefillRowsForEmail(dailyRows)}\n\nPozdrav`);
     window.location.href = `mailto:${TRANSFER_EMAIL}?subject=${subject}&body=${body}`;
   }
 
@@ -123,7 +128,7 @@ Pozdrav`);
       <div className="daily-refill-head">
         <div>
           <h2>Dnevni refil</h2>
-          <p>Učitaj Excel iz maila. Aplikacija čita samo <b>Sheet 2</b> i uzima ART, opis, bulk, količinu za prenos i pick.</p>
+          <p>Učitaj Excel iz maila. Aplikacija čita samo <b>Sheet 2</b>. Završni Excel ide redom: ART | Bulk | Količina | Pick | Opis.</p>
         </div>
         {dailyRows.length > 0 && <div className="daily-refill-count"><span>Stavki</span><b>{dailyRows.length}</b></div>}
       </div>
@@ -148,10 +153,11 @@ Pozdrav`);
         <div className="daily-refill-toolbar">
           <div>
             <strong>{dailyFileName || 'Učitani Excel'}</strong>
-            <small> Završni Excel se skida kao ART | Bulk | Količina | Pick.</small>
+            <small>Možeš menjati ART, Bulk, količinu, Pick i opis pre exporta.</small>
           </div>
           <div className="daily-refill-actions">
             <button className="ghost" onClick={() => fileInputRef.current?.click()}><UploadCloud size={16}/> Drugi Excel</button>
+            <button className="ghost" onClick={addEmptyDailyRow}><Plus size={16}/> Dodaj red</button>
             <button className="ghost" onClick={downloadDailyRefill}><FileSpreadsheet size={16}/> Preuzmi Excel</button>
             <button className="ghost" onClick={shareDailyRefill}><Share2 size={16}/> Podeli Excel</button>
             <button onClick={emailDailyRefill}><Mail size={16}/> Pošalji mail</button>
@@ -166,25 +172,20 @@ Pozdrav`);
           />
         </div>
 
-        <div className="daily-refill-list">
-          {dailyRows.map((row, index) => <article className="daily-refill-card" key={row.id}>
+        <div className="daily-refill-list daily-refill-list-v145">
+          {dailyRows.map((row, index) => <article className="daily-refill-card daily-refill-card-v145" key={row.id}>
             <div className="daily-card-index">{index + 1}</div>
             <div className="daily-card-main">
-              <div className="daily-card-top">
-                <strong>{row.art || '-'}</strong>
-                <span>{row.bulkLocation || '-'} → {row.pickLocation || '-'}</span>
+              <div className="daily-card-row daily-card-art-row">
+                <label><span>ART</span><input inputMode="numeric" value={row.art || ''} onChange={e => updateDailyRow(row.id, { art: e.target.value })}/></label>
+                <button className="icon-danger daily-delete-row" onClick={() => deleteDailyRow(row.id)}><Trash2 size={14}/></button>
               </div>
-              {row.description && <p className="daily-card-description">{row.description}</p>}
-              <div className="daily-card-inputs">
-                <label>
-                  <span>Količina</span>
-                  <input value={row.transferQty} onChange={e => updateDailyRow(row.id, { transferQty: e.target.value })}/>
-                </label>
-                <label className="daily-note-input">
-                  <span>Napomena</span>
-                  <input placeholder="Napomena..." value={row.note} onChange={e => updateDailyRow(row.id, { note: e.target.value })}/>
-                </label>
+              <div className="daily-card-row daily-card-locations-row">
+                <label><span>Bulk</span><input value={row.bulkLocation || ''} onChange={e => updateDailyRow(row.id, { bulkLocation: e.target.value })}/></label>
+                <label><span>Kol.</span><input inputMode="decimal" value={row.transferQty || ''} onChange={e => updateDailyRow(row.id, { transferQty: e.target.value })}/></label>
+                <label><span>Pick</span><input value={row.pickLocation || ''} onChange={e => updateDailyRow(row.id, { pickLocation: e.target.value })}/></label>
               </div>
+              <label className="daily-description-edit"><span>Opis</span><input value={row.description || ''} onChange={e => updateDailyRow(row.id, { description: e.target.value })} placeholder="Opis / napomena"/></label>
             </div>
           </article>)}
         </div>
@@ -193,7 +194,7 @@ Pozdrav`);
       <h2>Dopuna materijala</h2>
       <div className="form-grid">
         <label className="art-input-wrap"><span>ART-</span><input placeholder="123456" inputMode="numeric" maxLength="6" value={transferForm.art} onChange={e => setTransferForm(f => ({...f, art:e.target.value.replace(/\D/g, '').slice(0, 6)}))}/></label>
-        <input placeholder="Količina" value={transferForm.qty} onChange={e => setTransferForm(f => ({...f, qty:e.target.value}))}/>
+        <input placeholder="Količina" inputMode="decimal" value={transferForm.qty} onChange={e => setTransferForm(f => ({...f, qty:e.target.value}))}/>
         <input placeholder="Bulk" value={transferForm.from} onChange={e => setTransferForm(f => ({...f, from:e.target.value}))}/>
         <input placeholder="Pick" value={transferForm.to} onChange={e => setTransferForm(f => ({...f, to:e.target.value}))}/>
         <input className="wide" placeholder="Opis / napomena" value={transferForm.note} onChange={e => setTransferForm(f => ({...f, note:e.target.value}))}/>

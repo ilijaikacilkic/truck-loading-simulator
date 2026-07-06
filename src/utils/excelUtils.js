@@ -1,7 +1,11 @@
+function getQrCpr(row) { return String(row.cpr || '').trim(); }
+function getQrBox(row) { return String(row.boxNumber || '').trim(); }
+function getQrType(row) { return String(row.productType || '').trim(); }
+
 export function formatQrRowsForEmail(rows) {
   if (!rows.length) return 'Tabela je prazna.';
-  const header = '#\tBroj boksa\tTip robe\tOpis';
-  const lines = rows.map((row, index) => `${index + 1}\t${row.boxNumber}\t${row.productType}\t${row.description || '-'}`);
+  const header = '#\tCPR\tBoks\tTip robe';
+  const lines = rows.map((row, index) => `${index + 1}\t${getQrCpr(row)}\t${getQrBox(row) || '-'}\t${getQrType(row) || '-'}`);
   return [header, ...lines].join('\n');
 }
 
@@ -160,13 +164,20 @@ export function downloadXlsxFile(filename, sheetRows, sheetName = 'Sheet1', opti
 export function downloadScanningXlsx(rows) {
   const dateIso = todayIsoDate();
   const rowsForSheet = [
-    ['Scanning lista', '', '', ''],
-    ['Datum', todaySrDate(), '', ''],
+    ['Scanning lista', '', ''],
+    ['Datum', todaySrDate(), ''],
     [],
-    ['#', 'Broj boksa', 'Tip robe', 'Opis'],
-    ...rows.map((row, index) => [index + 1, row.boxNumber, row.productType, row.description || ''])
+    ['CPR', 'Boks', 'Tip robe'],
+    ...rows.map(row => [getQrCpr(row), getQrBox(row), getQrType(row)])
   ];
-  downloadXlsxFile(`scanning-lista-${dateIso}.xlsx`, rowsForSheet, 'Scanning lista');
+  downloadXlsxFile(`scanning-lista-${dateIso}.xlsx`, rowsForSheet, 'Scanning lista', {
+    styles: true,
+    styleForCell: (rowIndex) => {
+      if (rowIndex === 3) return 1;
+      if (rowIndex > 3) return 2 + ((rowIndex - 4) % 2);
+      return null;
+    }
+  });
 }
 
 export function formatTransferRowsForEmail(rows) {
@@ -195,8 +206,8 @@ export function downloadTransferXlsx(rows) {
   downloadXlsxFile(`dopuna-materijala-${dateIso}.xlsx`, rowsForSheet, 'Dopuna');
 }
 export function downloadQrCsv(rows) {
-  const header = ['#', 'Broj boksa', 'Tip robe', 'Opis'];
-  const csvRows = rows.map((row, index) => [index + 1, row.boxNumber, row.productType, row.description || '']);
+  const header = ['CPR', 'Boks', 'Tip robe'];
+  const csvRows = rows.map(row => [getQrCpr(row), getQrBox(row), getQrType(row)]);
   const csv = [header, ...csvRows]
     .map(cols => cols.map(value => `"${String(value).replace(/"/g, '""')}"`).join(';'))
     .join('\n');
@@ -384,12 +395,13 @@ export async function parseDailyRefillXlsx(file) {
 
 export function makeDailyRefillRows(rows) {
   return [
-    ['ART', 'Bulk', 'Količina', 'Pick'],
+    ['ART', 'Bulk', 'Količina', 'Pick', 'Opis'],
     ...rows.map(row => [
       row.art || '',
       row.bulkLocation || '',
       row.transferQty || '',
-      row.pickLocation || ''
+      row.pickLocation || '',
+      row.description || row.note || ''
     ])
   ];
 }
@@ -404,7 +416,7 @@ export function makeDailyRefillXlsxBlob(rows) {
     styles: true,
     styleForCell: (rowIndex) => {
       if (rowIndex === 0) return 1;
-      return 2 + ((rowIndex - 1) % 4);
+      return 2 + ((rowIndex - 1) % 2);
     }
   });
 }
@@ -429,7 +441,7 @@ export function formatDailyRefillRowsForEmail(rows) {
   return rows.map((row, index) => {
     const lines = [
       `${index + 1}. ${row.art || '-'}`,
-      `Opis: ${row.description || '-'}`,
+      `Opis: ${row.description || row.note || '-'}`,
       `Bulk: ${row.bulkLocation || '-'}`,
       `Količina za prenos: ${row.transferQty || '-'}`,
       `Pick: ${row.pickLocation || '-'}`
@@ -437,4 +449,39 @@ export function formatDailyRefillRowsForEmail(rows) {
     if (row.note) lines.push(`Napomena: ${row.note}`);
     return lines.join('\n');
   }).join('\n\n────────────────\n\n');
+}
+
+
+function formatProductionQuantity(value) {
+  const number = Number(value || 0);
+  if (!Number.isFinite(number)) return '';
+  return Number.isInteger(number) ? String(number) : String(Number(number.toFixed(3))).replace('.', ',');
+}
+
+export function makeProductionWriteoffRows(rows) {
+  return [
+    ['Pick lokacija', 'Ukupna metraža'],
+    ...rows.map(row => [
+      row.pickLocation || '',
+      formatProductionQuantity(row.quantity)
+    ])
+  ];
+}
+
+export function makeProductionWriteoffFilename() {
+  return `otpis-materijala-${todayIsoDate()}.xlsx`;
+}
+
+export function makeProductionWriteoffXlsxBlob(rows) {
+  return createXlsxBlob(makeProductionWriteoffRows(rows), 'Otpis', {
+    styles: true,
+    styleForCell: (rowIndex) => {
+      if (rowIndex === 0) return 1;
+      return 2 + ((rowIndex - 1) % 4);
+    }
+  });
+}
+
+export function downloadProductionWriteoffXlsx(rows) {
+  downloadBlob(makeProductionWriteoffFilename(), makeProductionWriteoffXlsxBlob(rows));
 }
