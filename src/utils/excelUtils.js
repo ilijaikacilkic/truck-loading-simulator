@@ -17,6 +17,10 @@ export function todayIsoDate() {
 export function todaySrDate() {
   return new Date().toLocaleDateString('sr-RS');
 }
+export function todayNavisionDate() {
+  const d = new Date();
+  return `${pad2(d.getDate())}-${pad2(d.getMonth() + 1)}-${String(d.getFullYear()).slice(-2)}`;
+}
 export function escapeSheetXml(value) {
   return String(value ?? '').replace(/[<>&'\"]/g, c => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;', "'": '&apos;', '"': '&quot;' }[c]));
 }
@@ -390,28 +394,48 @@ export async function parseDailyRefillXlsx(file) {
   const dataRows = looksLikeHeader(rows[0]) ? rows.slice(1) : rows;
   return dataRows
     .map(dailyRefillRowFromExcel)
-    .filter(row => row.art || row.description || row.bulkLocation || row.transferQty || row.pickLocation);
+    .filter(row => String(row.art || '').trim());
 }
 
-export function makeDailyRefillRows(rows) {
+function cleanDailyRefillRows(rows) {
+  return (rows || []).filter(row => String(row.art || '').trim());
+}
+
+function normalizeDailyDocumentNo(documentNo) {
+  const value = String(documentNo || '').trim().toUpperCase();
+  return value || 'A0000000';
+}
+
+function normalizeDailyQuantity(value) {
+  return String(value ?? '').trim().replace('.', ',');
+}
+
+export function makeDailyRefillRows(rows, documentNo = 'A0000000') {
+  const postingDate = todayNavisionDate();
+  const docNo = normalizeDailyDocumentNo(documentNo);
+  const locationCode = 'VERANO-RS';
   return [
-    ['ART', 'Bulk', 'Količina', 'Pick', 'Opis'],
-    ...rows.map(row => [
+    ['Posting Date', 'Document No.', 'Item No.', 'Description', 'Location Code', 'Quantity', 'Unit of Measure', 'Bin Code', 'New Bin Code'],
+    ...cleanDailyRefillRows(rows).map(row => [
+      postingDate,
+      docNo,
       row.art || '',
+      row.description || row.note || '',
+      locationCode,
+      normalizeDailyQuantity(row.transferQty),
+      '',
       row.bulkLocation || '',
-      row.transferQty || '',
-      row.pickLocation || '',
-      row.description || row.note || ''
+      row.pickLocation || ''
     ])
   ];
 }
 
 export function makeDailyRefillFilename() {
-  return `dnevni-refil-${todayIsoDate()}.xlsx`;
+  return `dnevni-refil-navision-${todayIsoDate()}.xlsx`;
 }
 
-export function makeDailyRefillXlsxBlob(rows) {
-  const sheetRows = makeDailyRefillRows(rows);
+export function makeDailyRefillXlsxBlob(rows, documentNo = 'A0000000') {
+  const sheetRows = makeDailyRefillRows(rows, documentNo);
   return createXlsxBlob(sheetRows, 'Dnevni refil', {
     styles: true,
     styleForCell: (rowIndex) => {
@@ -421,9 +445,9 @@ export function makeDailyRefillXlsxBlob(rows) {
   });
 }
 
-export function makeDailyRefillXlsxFile(rows) {
+export function makeDailyRefillXlsxFile(rows, documentNo = 'A0000000') {
   const filename = makeDailyRefillFilename();
-  const blob = makeDailyRefillXlsxBlob(rows);
+  const blob = makeDailyRefillXlsxBlob(rows, documentNo);
   try {
     return new File([blob], filename, { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
   } catch {
@@ -432,18 +456,21 @@ export function makeDailyRefillXlsxFile(rows) {
   }
 }
 
-export function downloadDailyRefillXlsx(rows) {
-  downloadBlob(makeDailyRefillFilename(), makeDailyRefillXlsxBlob(rows));
+export function downloadDailyRefillXlsx(rows, documentNo = 'A0000000') {
+  downloadBlob(makeDailyRefillFilename(), makeDailyRefillXlsxBlob(rows, documentNo));
 }
 
-export function formatDailyRefillRowsForEmail(rows) {
-  if (!rows.length) return 'Nema stavki za dnevni refil.';
-  return rows.map((row, index) => {
+export function formatDailyRefillRowsForEmail(rows, documentNo = 'A0000000') {
+  const cleanRows = cleanDailyRefillRows(rows);
+  if (!cleanRows.length) return 'Nema stavki za dnevni refil.';
+  return cleanRows.map((row, index) => {
     const lines = [
       `${index + 1}. ${row.art || '-'}`,
+      `Document No.: ${normalizeDailyDocumentNo(documentNo)}`,
       `Opis: ${row.description || row.note || '-'}`,
+      `Location Code: VERANO-RS`,
+      `Količina: ${row.transferQty || '-'}`,
       `Bulk: ${row.bulkLocation || '-'}`,
-      `Količina za prenos: ${row.transferQty || '-'}`,
       `Pick: ${row.pickLocation || '-'}`
     ];
     if (row.note) lines.push(`Napomena: ${row.note}`);
@@ -458,26 +485,43 @@ function formatProductionQuantity(value) {
   return Number.isInteger(number) ? String(number) : String(Number(number.toFixed(3))).replace('.', ',');
 }
 
+function writeoffExportDate() {
+  const d = new Date();
+  const months = ['jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec'];
+  return `${d.getDate()}-${months[d.getMonth()]}`;
+}
+
 export function makeProductionWriteoffRows(rows) {
+  const date = writeoffExportDate();
   return [
-    ['Pick lokacija', 'Ukupna metraža'],
+    ['Name', 'Date', 'Entry type', 'Article number', 'Article description', 'How many', 'Unit', 'Department', 'SOR projects - POR', 'Reason', 'Additional', 'Correction made?'],
     ...rows.map(row => [
-      row.pickLocation || '',
-      formatProductionQuantity(row.quantity)
+      'Domestic',
+      date,
+      'Negative Adjmt.',
+      row.art || '',
+      row.description || '',
+      formatProductionQuantity(row.quantity),
+      '',
+      '',
+      '',
+      'Defect - Scratch or Dent',
+      '',
+      'Yes'
     ])
   ];
 }
 
 export function makeProductionWriteoffFilename() {
-  return `otpis-materijala-${todayIsoDate()}.xlsx`;
+  return `otpis-skarta-${todayIsoDate()}.xlsx`;
 }
 
 export function makeProductionWriteoffXlsxBlob(rows) {
-  return createXlsxBlob(makeProductionWriteoffRows(rows), 'Otpis', {
+  return createXlsxBlob(makeProductionWriteoffRows(rows), 'Otpis skarta', {
     styles: true,
     styleForCell: (rowIndex) => {
       if (rowIndex === 0) return 1;
-      return 2 + ((rowIndex - 1) % 4);
+      return 2 + ((rowIndex - 1) % 2);
     }
   });
 }

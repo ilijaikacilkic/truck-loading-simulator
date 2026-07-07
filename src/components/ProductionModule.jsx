@@ -1,168 +1,258 @@
 import React, { useMemo, useState } from 'react';
-import { ArrowLeft, Download, Plus, Trash2, X } from 'lucide-react';
-import { downloadXlsxFile, todayIsoDate } from '../utils/excelUtils.js';
+import { ArrowLeft, Download, Plus, Search, Trash2 } from 'lucide-react';
+import { downloadProductionWriteoffXlsx } from '../utils/excelUtils.js';
+import { PRODUCTION_ARTICLE_LOCATIONS, findArticleByLocation, normalizeProductionLocation, uppercaseProductionLocation } from '../utils/productionInventory.js';
 
-const STORAGE_KEY = 'verano-production-writeoff-v1';
+const WRITEOFF_STORAGE_KEY = 'productionWriteoffRowsV2';
 
-function parseQty(value) {
-  const normalized = String(value || '').replace(',', '.').trim();
+function parseQuantity(value) {
+  const normalized = String(value || '')
+    .replace(',', '.')
+    .replace(/[^0-9.]/g, '');
   const number = Number(normalized);
   return Number.isFinite(number) ? number : 0;
 }
 
-function formatQty(value) {
-  const rounded = Math.round((Number(value) || 0) * 1000) / 1000;
-  return String(rounded).replace('.', ',');
+function formatQuantity(value) {
+  const number = Number(value || 0);
+  if (!Number.isFinite(number)) return '0';
+  return Number.isInteger(number) ? String(number) : String(Number(number.toFixed(3))).replace('.', ',');
 }
 
-function normalizePick(value) {
-  return String(value || '').trim().toUpperCase();
+function formatTime(value) {
+  if (!value) return '-';
+  try {
+    return new Date(value).toLocaleString('sr-RS', {
+      day: '2-digit', month: '2-digit', year: '2-digit', hour: '2-digit', minute: '2-digit'
+    });
+  } catch {
+    return '-';
+  }
+}
+
+function loadStoredWriteoffRows() {
+  try {
+    return JSON.parse(localStorage.getItem(WRITEOFF_STORAGE_KEY) || '[]');
+  } catch {
+    return [];
+  }
 }
 
 export default function ProductionModule({ ctx }) {
   const { appView, ModuleHeader } = ctx;
   const [screen, setScreen] = useState('menu');
-  const [pick, setPick] = useState('');
-  const [qty, setQty] = useState('');
-  const [rows, setRows] = useState(() => {
-    try { return JSON.parse(localStorage.getItem(STORAGE_KEY)) || []; } catch { return []; }
-  });
-  const [message, setMessage] = useState('');
+  const [pickLocation, setPickLocation] = useState('');
+  const [quantity, setQuantity] = useState('');
+  const [search, setSearch] = useState('');
+  const [items, setItems] = useState(loadStoredWriteoffRows);
 
-  const totalMeters = useMemo(() => rows.reduce((sum, row) => sum + parseQty(row.qty), 0), [rows]);
+  const selectedArticle = useMemo(() => findArticleByLocation(pickLocation), [pickLocation]);
+  const totalMeters = useMemo(
+    () => items.reduce((sum, item) => sum + Number(item.quantity || 0), 0),
+    [items]
+  );
+
+  const filteredLocations = useMemo(() => {
+    const query = normalizeProductionLocation(search || pickLocation);
+    if (!query || query.length < 2) return [];
+    return PRODUCTION_ARTICLE_LOCATIONS
+      .filter(item => item.location.includes(query) || item.art.includes(query))
+      .slice(0, 8);
+  }, [search, pickLocation]);
 
   if (appView !== 'production') return null;
 
-  function saveRows(nextRows) {
-    setRows(nextRows);
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(nextRows));
+  function commitItems(nextItems) {
+    setItems(nextItems);
+    try { localStorage.setItem(WRITEOFF_STORAGE_KEY, JSON.stringify(nextItems)); } catch {}
   }
 
-  function addWriteOff() {
-    const cleanPick = normalizePick(pick);
-    const amount = parseQty(qty);
+  function addWriteoffItem(event) {
+    event?.preventDefault?.();
+    const pick = normalizeProductionLocation(pickLocation);
+    const article = findArticleByLocation(pick);
+    const qty = parseQuantity(quantity);
+    const now = new Date().toISOString();
 
-    if (!cleanPick) {
-      setMessage('Unesi pick lokaciju.');
+    if (!pick) {
+      alert('Unesi lokaciju.');
       return;
     }
-    if (amount <= 0) {
-      setMessage('Unesi količinu koja se otpisuje.');
+    if (!article) {
+      alert('Lokacija nije pronađena u inventaru. Možeš uneti npr. AL12, AP20 ili RS 20 AL 12.');
+      return;
+    }
+    if (!qty || qty <= 0) {
+      alert('Unesi količinu za otpis.');
       return;
     }
 
-    const existingIndex = rows.findIndex(row => normalizePick(row.pick) === cleanPick);
-    let nextRows;
-    if (existingIndex >= 0) {
-      nextRows = rows.map((row, index) => index === existingIndex
-        ? { ...row, qty: String(parseQty(row.qty) + amount) }
-        : row
-      );
-      setMessage(`Dodato na postojeću lokaciju ${cleanPick}.`);
-    } else {
-      nextRows = [...rows, { id: crypto?.randomUUID?.() || `${Date.now()}-${Math.random()}`, pick: cleanPick, qty: String(amount) }];
-      setMessage(`Dodato: ${cleanPick}.`);
-    }
+    const nextItems = (() => {
+      const existingIndex = items.findIndex(item => normalizeProductionLocation(item.pickLocation) === pick);
+      if (existingIndex >= 0) {
+        return items.map((item, index) => index === existingIndex
+          ? {
+              ...item,
+              art: article.art,
+              pickLocation: article.location,
+              quantity: Number(item.quantity || 0) + qty,
+              updatedAt: now,
+              additions: [...(item.additions || []), { quantity: qty, createdAt: now }]
+            }
+          : item
+        );
+      }
+      return [...items, {
+        id: crypto?.randomUUID?.() || `${Date.now()}-${Math.random()}`,
+        art: article.art,
+        pickLocation: article.location,
+        quantity: qty,
+        createdAt: now,
+        updatedAt: now,
+        additions: [{ quantity: qty, createdAt: now }]
+      }];
+    })();
 
-    saveRows(nextRows);
-    setPick('');
-    setQty('');
+    commitItems(nextItems);
+    setPickLocation('');
+    setQuantity('');
+    setSearch('');
   }
 
-  function deleteRow(id) {
-    saveRows(rows.filter(row => row.id !== id));
+  function removeItem(id) {
+    commitItems(items.filter(item => item.id !== id));
   }
 
-  function clearAll() {
-    saveRows([]);
-    setMessage('Otpis je očišćen.');
+  function clearItems() {
+    if (!items.length) return;
+    if (!confirm('Obrisati sve stavke za otpis?')) return;
+    commitItems([]);
   }
 
-  function downloadWriteOffExcel() {
-    if (!rows.length) {
-      setMessage('Nema stavki za Excel.');
+  function chooseLocation(location) {
+    setPickLocation(location);
+    setSearch('');
+  }
+
+  function downloadExcel() {
+    if (!items.length) {
+      alert('Nema dodatih stavki za otpis.');
       return;
     }
-    const sheetRows = [
-      ['Pick lokacija', 'Ukupna metraža'],
-      ...rows.map(row => [row.pick, parseQty(row.qty)])
-    ];
-    downloadXlsxFile(`otpis-materijala-${todayIsoDate()}.xlsx`, sheetRows, 'Otpis');
-  }
-
-  if (screen === 'menu') {
-    return <>
-      <ModuleHeader />
-      <section className="simple-module production-module">
-        <div className="production-menu-card">
-          <button className="production-action-tile writeoff-tile" onClick={() => setScreen('writeoff')}>
-            <span className="writeoff-icon"><X size={58} strokeWidth={4}/></span>
-            <strong>Otpis</strong>
-            <small>Unos pick lokacije i metraže za otpis materijala.</small>
-          </button>
-        </div>
-      </section>
-    </>;
+    downloadProductionWriteoffXlsx(items);
   }
 
   return <>
-    <ModuleHeader>
-      <button className="ghost" onClick={() => setScreen('menu')}><ArrowLeft size={16}/> Proizvodnja</button>
-    </ModuleHeader>
+    <ModuleHeader />
 
-    <section className="simple-module production-module writeoff-module">
-      <div className="writeoff-panel">
-        <div className="writeoff-heading">
-          <span className="writeoff-icon small"><X size={34} strokeWidth={4}/></span>
+    {screen === 'menu' ? (
+      <section className="simple-module production-module production-menu-module">
+        <button className="production-action-card writeoff-entry-card" onClick={() => setScreen('writeoff')}>
+          <span className="writeoff-red-x">✕</span>
+          <b>Otpis</b>
+          <small>Lokacija + količina za otpis</small>
+        </button>
+      </section>
+    ) : (
+      <section className="simple-module production-writeoff-module">
+        <div className="writeoff-topbar">
+          <button className="ghost" onClick={() => setScreen('menu')}><ArrowLeft size={16}/> Nazad</button>
           <div>
             <h2>Otpis</h2>
-            <p>Unesi pick lokaciju i količinu. Ako lokacija već postoji, metraža se sabira.</p>
+            <p>Unesi lokaciju i metražu. Aplikacija sama nalazi ART i sabira ako ista lokacija već postoji.</p>
           </div>
         </div>
 
-        <div className="writeoff-form">
+        <form className="writeoff-form writeoff-form-v2" onSubmit={addWriteoffItem}>
           <label>
-            <span>Pick lokacija</span>
-            <input value={pick} onChange={e => setPick(e.target.value.toUpperCase())} placeholder="npr. A12-03" />
+            <span>Lokacija</span>
+            <input
+              value={pickLocation}
+              onChange={event => {
+                const value = uppercaseProductionLocation(event.target.value);
+                setPickLocation(value);
+                setSearch(value);
+              }}
+              onBlur={() => {
+                const normalized = normalizeProductionLocation(pickLocation);
+                setPickLocation(normalized);
+                setSearch(normalized);
+              }}
+              placeholder="npr. AL12 ili AP20"
+              autoCapitalize="characters"
+            />
           </label>
           <label>
             <span>Količina za otpis</span>
-            <input inputMode="decimal" value={qty} onChange={e => setQty(e.target.value)} placeholder="npr. 6" />
+            <input
+              value={quantity}
+              onChange={event => setQuantity(event.target.value)}
+              placeholder="npr. 6 ili 12,5"
+              inputMode="decimal"
+            />
           </label>
-          <button className="primary writeoff-add" onClick={addWriteOff}><Plus size={18}/> Dodaj</button>
+          <button type="submit" className="primary writeoff-add-btn"><Plus size={18}/> Dodaj</button>
+        </form>
+
+        <div className="writeoff-article-preview">
+          {selectedArticle ? (
+            <span>Pronađeno: <b>{selectedArticle.art}</b> · {selectedArticle.location}</span>
+          ) : (
+            <span>Upiši lokaciju da aplikacija pronađe ART iz inventara.</span>
+          )}
         </div>
 
-        {message && <p className="writeoff-message">{message}</p>}
+        {(filteredLocations.length > 0 && !selectedArticle) && (
+          <div className="writeoff-location-suggestions">
+            <div><Search size={15}/> Predlozi lokacija</div>
+            {filteredLocations.map(item => (
+              <button key={`${item.art}-${item.location}`} type="button" onClick={() => chooseLocation(item.location)}>
+                <b>{item.location}</b><span>{item.art}</span>
+              </button>
+            ))}
+          </div>
+        )}
 
-        <div className="writeoff-summary">
-          <strong>Ukupno lokacija: {rows.length}</strong>
-          <span>Ukupna metraža: {formatQty(totalMeters)}</span>
+        <div className="writeoff-actions-row">
+          <button className="primary" onClick={downloadExcel} disabled={!items.length}><Download size={18}/> Preuzmi Excel</button>
+          <button className="ghost" onClick={clearItems} disabled={!items.length}><Trash2 size={18}/> Obriši sve</button>
         </div>
 
-        {rows.length > 0 && <div className="writeoff-table-wrap">
-          <table className="writeoff-table">
-            <thead>
-              <tr>
-                <th>Pick lokacija</th>
-                <th>Ukupna metraža</th>
-                <th></th>
-              </tr>
-            </thead>
-            <tbody>
-              {rows.map(row => <tr key={row.id}>
-                <td>{row.pick}</td>
-                <td>{formatQty(row.qty)}</td>
-                <td><button className="icon danger" onClick={() => deleteRow(row.id)} title="Obriši"><Trash2 size={16}/></button></td>
-              </tr>)}
-            </tbody>
-          </table>
-        </div>}
-
-        <div className="writeoff-actions">
-          <button className="primary" onClick={downloadWriteOffExcel}><Download size={18}/> Preuzmi Excel</button>
-          {rows.length > 0 && <button className="ghost danger-text" onClick={clearAll}>Očisti otpis</button>}
-        </div>
-      </div>
-    </section>
+        {items.length ? (
+          <div className="writeoff-list">
+            <div className="writeoff-summary">
+              <span>Stavke: <b>{items.length}</b></span>
+              <span>Ukupno: <b>{formatQuantity(totalMeters)}</b></span>
+            </div>
+            <table className="writeoff-table writeoff-table-v2">
+              <thead>
+                <tr>
+                  <th>ART</th>
+                  <th>Lokacija</th>
+                  <th>Ukupno</th>
+                  <th>Datum/vreme</th>
+                  <th></th>
+                </tr>
+              </thead>
+              <tbody>
+                {items.map(item => (
+                  <tr key={item.id}>
+                    <td><b>{item.art}</b></td>
+                    <td>{item.pickLocation}</td>
+                    <td>{formatQuantity(item.quantity)}</td>
+                    <td>{formatTime(item.updatedAt || item.createdAt)}</td>
+                    <td><button className="ghost mini-danger" onClick={() => removeItem(item.id)}>Obriši</button></td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ) : (
+          <div className="empty-card writeoff-empty">
+            Još nema dodatih stavki. Kada dodaš istu lokaciju više puta, aplikacija će odmah sabrati metražu i zabeležiti vreme poslednjeg unosa.
+          </div>
+        )}
+      </section>
+    )}
   </>;
 }

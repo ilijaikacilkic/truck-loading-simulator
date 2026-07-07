@@ -58,10 +58,10 @@ export default function ScannerModule({ ctx }) {
       <div className="qr-product-panel">
         <div>
           <h3>Tip robe</h3>
-          <p>Posle skeniranja CPR-ova izaberi tip robe. Popuniće sve redove bez tipa, a pojedinačno možeš da promeniš u tabeli.</p>
+          <p>Klik na tip robe popunjava sve CPR redove koji još nemaju tip. Posle toga pojedinačno promeni samo redove koji su izuzetak.</p>
         </div>
         <div className="qr-product-buttons">
-          {QR_PRODUCT_TYPES.map(type => <button key={type} onClick={() => applyQrProductType(type)} disabled={!rowsWithoutType.length}>{type}</button>)}
+          {QR_PRODUCT_TYPES.map(type => <button key={type} onClick={() => applyQrProductType(type)} disabled={!rowsWithoutType.length}>{type}<small>Popuni {rowsWithoutType.length || 0}</small></button>)}
         </div>
       </div>
 
