@@ -24,7 +24,7 @@ export default function ScannerModule({ ctx }) {
           <div className="qr-scanner-head">
             <div>
               <h2><QrCode size={22}/> Skeniranje</h2>
-              <p>Proizvod skenira CPR. Boks povezuje sve proizvode koji čekaju boks.</p>
+              
             </div>
             <span className="qr-count">{qrRows.length} CPR</span>
           </div>
@@ -58,7 +58,6 @@ export default function ScannerModule({ ctx }) {
       <div className="qr-product-panel">
         <div>
           <h3>Tip robe</h3>
-          <p>Klik na tip robe popunjava sve CPR redove koji još nemaju tip. Posle toga pojedinačno promeni samo redove koji su izuzetak.</p>
         </div>
         <div className="qr-product-buttons">
           {QR_PRODUCT_TYPES.map(type => <button key={type} onClick={() => applyQrProductType(type)} disabled={!rowsWithoutType.length}>{type}<small>Popuni {rowsWithoutType.length || 0}</small></button>)}

@@ -1,3 +1,4 @@
+import { normalizeArtNumber, normalizeWarehouseLocation } from './dataFormat.js';
 function getQrCpr(row) { return String(row.cpr || '').trim(); }
 function getQrBox(row) { return String(row.boxNumber || '').trim(); }
 function getQrType(row) { return String(row.productType || '').trim(); }
@@ -205,7 +206,7 @@ export function downloadTransferXlsx(rows) {
     ['Datum', todaySrDate(), '', ''],
     [],
     ['#', 'Art', 'Količina', 'Bulk', 'Pick', 'Napomena'],
-    ...rows.map((row, index) => [index + 1, row.art || '', row.qty || '', row.from || '', row.to || '', row.note || ''])
+    ...rows.map((row, index) => [index + 1, normalizeArtNumber(row.art) || row.art || '', row.qty || '', normalizeWarehouseLocation(row.from) || row.from || '', normalizeWarehouseLocation(row.to) || row.to || '', row.note || ''])
   ];
   downloadXlsxFile(`dopuna-materijala-${dateIso}.xlsx`, rowsForSheet, 'Dopuna');
 }
@@ -375,11 +376,11 @@ function looksLikeHeader(row) {
 function dailyRefillRowFromExcel(row) {
   return {
     id: crypto?.randomUUID?.() || `${Date.now()}-${Math.random()}`,
-    art: String(row[0] || '').trim(),
+    art: normalizeArtNumber(String(row[0] || '').trim()),
     description: String(row[1] || '').trim(),
-    bulkLocation: String(row[3] || '').trim(),
+    bulkLocation: normalizeWarehouseLocation(String(row[3] || '').trim()),
     transferQty: String(row[5] || '').trim(),
-    pickLocation: String(row[6] || '').trim(),
+    pickLocation: normalizeWarehouseLocation(String(row[6] || '').trim()),
     note: ''
   };
 }
@@ -419,13 +420,13 @@ export function makeDailyRefillRows(rows, documentNo = 'A0000000') {
     ...cleanDailyRefillRows(rows).map(row => [
       postingDate,
       docNo,
-      row.art || '',
+      normalizeArtNumber(row.art) || '',
       row.description || row.note || '',
       locationCode,
       normalizeDailyQuantity(row.transferQty),
       '',
-      row.bulkLocation || '',
-      row.pickLocation || ''
+      normalizeWarehouseLocation(row.bulkLocation) || '',
+      normalizeWarehouseLocation(row.pickLocation) || ''
     ])
   ];
 }

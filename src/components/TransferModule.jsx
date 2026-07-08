@@ -1,6 +1,7 @@
 import React, { useRef, useState } from 'react';
 import { Trash2, Plus, FileSpreadsheet, Mail, UploadCloud, ClipboardList, RotateCcw, Share2 } from 'lucide-react';
 import { TRANSFER_EMAIL } from '../utils/constants.js';
+import { cleanLocationInput, normalizeArtNumber, normalizeWarehouseLocation } from '../utils/dataFormat.js';
 import {
   downloadDailyRefillXlsx,
   formatDailyRefillRowsForEmail,
@@ -9,25 +10,6 @@ import {
   parseDailyRefillXlsx,
   todaySrDate
 } from '../utils/excelUtils.js';
-
-
-function uppercaseWarehouseText(value) {
-  return String(value || '').toUpperCase();
-}
-
-function normalizeWarehouseLocation(value) {
-  const raw = uppercaseWarehouseText(value).trim();
-  if (!raw) return '';
-
-  const compact = raw.replace(/[^A-Z0-9]/g, '');
-  const match = compact.match(/^(?:RS20)?([A-Z]{2})(\d{1,2})$/);
-  if (match) {
-    const [, row, number] = match;
-    return `RS 20 ${row} ${number.padStart(2, '0')}`;
-  }
-
-  return raw.replace(/\s+/g, ' ');
-}
 
 export default function TransferModule({ ctx }) {
   const {
@@ -85,6 +67,9 @@ export default function TransferModule({ ctx }) {
     }]);
   }
 
+  function deleteDailyRow(id) {
+    setDailyRows(rows => rows.filter(row => row.id !== id));
+  }
 
   function clearDailyRefill() {
     if (!dailyRows.length) return;
@@ -140,19 +125,16 @@ export default function TransferModule({ ctx }) {
     window.location.href = `mailto:${TRANSFER_EMAIL}?subject=${subject}&body=${body}`;
   }
 
-  const headerButton = transferView === 'daily'
-    ? <button className="ghost" onClick={() => setTransferView('manual')}><RotateCcw size={16}/> Ručna dopuna</button>
-    : <button onClick={() => setTransferView('daily')}><ClipboardList size={16}/> Dnevni refil</button>;
+  function normalizeDailyLocation(id, field, value) {
+    updateDailyRow(id, { [field]: normalizeWarehouseLocation(value) });
+  }
 
   return <>
-    <ModuleHeader>{headerButton}</ModuleHeader>
+    <ModuleHeader>{transferView === 'daily' ? <button className="ghost" onClick={() => setTransferView('manual')}><RotateCcw size={16}/> Ručna dopuna</button> : null}</ModuleHeader>
 
     {transferView === 'daily' ? <section className="simple-module daily-refill-module">
-      <div className="daily-refill-head">
-        <div>
-          <h2>Dnevni refil</h2>
-          <p>Učitaj Excel iz maila. Aplikacija čita samo <b>Sheet 2</b>. Završni Excel je spreman za kopiranje u Navision.</p>
-        </div>
+      <div className="daily-refill-head compact-heading">
+        <h2>Dnevni refil</h2>
         {dailyRows.length > 0 && <div className="daily-refill-count"><span>Stavki sa ART</span><b>{dailyItemCount}</b></div>}
       </div>
 
@@ -167,17 +149,13 @@ export default function TransferModule({ ctx }) {
         <button className="daily-upload-button" onClick={() => fileInputRef.current?.click()} disabled={dailyLoading}>
           <UploadCloud size={46}/>
           <strong>{dailyLoading ? 'Učitavam Excel...' : 'Upload Excel fajla'}</strong>
-          <span>Izaberi .xlsx fajl skinut sa maila</span>
         </button>
         {dailyUploadError && <p className="daily-error">{dailyUploadError}</p>}
       </div>}
 
       {dailyRows.length > 0 && <>
         <div className="daily-refill-toolbar">
-          <div>
-            <strong>{dailyFileName || 'Učitani Excel'}</strong>
-            <small>Možeš menjati ART, Bulk, količinu, Pick i opis. Export ide u Navision rasporedu.</small>
-          </div>
+          <div><strong>{dailyFileName || 'Učitani Excel'}</strong></div>
           <label className="daily-doc-input"><span>Document No.</span><input value={dailyDocumentNo} onChange={e => setDailyDocumentNo(e.target.value.toUpperCase())}/></label>
           <div className="daily-refill-actions">
             <button className="ghost" onClick={() => fileInputRef.current?.click()}><UploadCloud size={16}/> Drugi Excel</button>
@@ -185,7 +163,7 @@ export default function TransferModule({ ctx }) {
             <button className="ghost" onClick={downloadDailyRefill}><FileSpreadsheet size={16}/> Preuzmi Excel</button>
             <button className="ghost" onClick={shareDailyRefill}><Share2 size={16}/> Podeli Excel</button>
             <button onClick={emailDailyRefill}><Mail size={16}/> Pošalji mail</button>
-            <button className="danger" onClick={clearDailyRefill}><Trash2 size={16}/> Obriši</button>
+            <button className="danger" onClick={clearDailyRefill}><Trash2 size={16}/> Obriši sve</button>
           </div>
           <input
             ref={fileInputRef}
@@ -201,25 +179,27 @@ export default function TransferModule({ ctx }) {
             <div className="daily-card-index">{index + 1}</div>
             <div className="daily-card-main">
               <div className="daily-card-row daily-card-art-row">
-                <label><span>ART</span><input inputMode="numeric" value={row.art || ''} onChange={e => updateDailyRow(row.id, { art: e.target.value.toUpperCase() })}/></label>
+                <label><span>ART</span><input inputMode="numeric" value={row.art || ''} onChange={e => updateDailyRow(row.id, { art: e.target.value.toUpperCase() })} onBlur={e => updateDailyRow(row.id, { art: normalizeArtNumber(e.target.value) })}/></label>
+                <button className="icon-danger daily-delete-row" onClick={() => deleteDailyRow(row.id)} title="Obriši stavku"><Trash2 size={15}/></button>
               </div>
               <div className="daily-card-row daily-card-locations-row">
-                <label><span>Bulk</span><input value={row.bulkLocation || ''} onChange={e => updateDailyRow(row.id, { bulkLocation: uppercaseWarehouseText(e.target.value) })} onBlur={e => updateDailyRow(row.id, { bulkLocation: normalizeWarehouseLocation(e.target.value) })}/></label>
-                <label><span>Kol.</span><input inputMode="decimal" value={row.transferQty || ''} onChange={e => updateDailyRow(row.id, { transferQty: e.target.value })}/></label>
-                <label className="daily-pick-field"><span>Pick</span><input value={row.pickLocation || ''} onChange={e => updateDailyRow(row.id, { pickLocation: uppercaseWarehouseText(e.target.value) })} onBlur={e => updateDailyRow(row.id, { pickLocation: normalizeWarehouseLocation(e.target.value) })}/></label>
+                <label><span>Bulk</span><input value={row.bulkLocation || ''} onChange={e => updateDailyRow(row.id, { bulkLocation: cleanLocationInput(e.target.value) })} onBlur={e => normalizeDailyLocation(row.id, 'bulkLocation', e.target.value)}/></label>
+                <label><span>Količina</span><input inputMode="decimal" value={row.transferQty || ''} onChange={e => updateDailyRow(row.id, { transferQty: e.target.value })}/></label>
+                <label className="daily-pick-field"><span>Pick</span><input value={row.pickLocation || ''} onChange={e => updateDailyRow(row.id, { pickLocation: cleanLocationInput(e.target.value) })} onBlur={e => normalizeDailyLocation(row.id, 'pickLocation', e.target.value)}/></label>
               </div>
-              <label className="daily-description-edit"><span>Opis</span><input value={row.description || ''} onChange={e => updateDailyRow(row.id, { description: e.target.value })} placeholder="Opis / napomena"/></label>
+              <label className="daily-description-edit"><span>Opis</span><input value={row.description || ''} onChange={e => updateDailyRow(row.id, { description: e.target.value })}/></label>
             </div>
           </article>)}
         </div>
       </>}
-    </section> : <section className="simple-module">
+    </section> : <section className="simple-module transfer-module">
+      <div className="daily-refill-entry-row"><button className="daily-refill-main-button" onClick={() => setTransferView('daily')}><ClipboardList size={18}/> Dnevni refil</button></div>
       <h2>Dopuna materijala</h2>
       <div className="form-grid">
         <label className="art-input-wrap"><span>ART-</span><input placeholder="123456" inputMode="numeric" maxLength="6" value={transferForm.art} onChange={e => setTransferForm(f => ({...f, art:e.target.value.replace(/\D/g, '').slice(0, 6)}))}/></label>
         <input placeholder="Količina" inputMode="decimal" value={transferForm.qty} onChange={e => setTransferForm(f => ({...f, qty:e.target.value}))}/>
-        <input placeholder="Bulk" value={transferForm.from} onChange={e => setTransferForm(f => ({...f, from:uppercaseWarehouseText(e.target.value)}))} onBlur={e => setTransferForm(f => ({...f, from:normalizeWarehouseLocation(e.target.value)}))}/>
-        <input placeholder="Pick" value={transferForm.to} onChange={e => setTransferForm(f => ({...f, to:uppercaseWarehouseText(e.target.value)}))} onBlur={e => setTransferForm(f => ({...f, to:normalizeWarehouseLocation(e.target.value)}))}/>
+        <input placeholder="Bulk" value={transferForm.from} onChange={e => setTransferForm(f => ({...f, from:cleanLocationInput(e.target.value)}))} onBlur={e => setTransferForm(f => ({...f, from:normalizeWarehouseLocation(e.target.value)}))}/>
+        <input placeholder="Pick" value={transferForm.to} onChange={e => setTransferForm(f => ({...f, to:cleanLocationInput(e.target.value)}))} onBlur={e => setTransferForm(f => ({...f, to:normalizeWarehouseLocation(e.target.value)}))}/>
         <input className="wide" placeholder="Opis / napomena" value={transferForm.note} onChange={e => setTransferForm(f => ({...f, note:e.target.value}))}/>
         <div className="wide form-actions">
           <button onClick={saveTransferRecord}><Plus size={16}/> Dodaj stavku</button>
@@ -229,7 +209,7 @@ export default function TransferModule({ ctx }) {
         </div>
       </div>
       <div className="record-list transfer-list">
-        {transfers.length===0 && <p className="empty-card">Još nema dopuna. Unesi podatke i klikni „Dodaj stavku”.</p>}
+        {transfers.length===0 && <p className="empty-card">Nema dodatih dopuna</p>}
         {transfers.map((r, index) => <div className="record-card transfer-card" key={r.id}>
           <div className="transfer-card-head"><b>Dopuna {index + 1}</b><button className="icon-danger" onClick={() => deleteTransferRecord(r.id)}><Trash2 size={15}/></button></div>
           <div className="transfer-lines">

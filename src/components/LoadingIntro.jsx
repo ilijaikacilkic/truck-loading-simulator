@@ -1,9 +1,8 @@
-import React, { useMemo, useState } from 'react';
+import React, { useState } from 'react';
 import { ArrowRight, SkipForward } from 'lucide-react';
 
 export default function LoadingIntro({ cargoTypes, onContinue, onSkip }) {
   const [counts, setCounts] = useState({});
-  const total = useMemo(() => Object.values(counts).reduce((sum, v) => sum + (Number(v) || 0), 0), [counts]);
 
   function updateCount(id, value) {
     const clean = String(value || '').replace(/\D/g, '').slice(0, 4);
@@ -11,13 +10,9 @@ export default function LoadingIntro({ cargoTypes, onContinue, onSkip }) {
   }
 
   return <section className="loading-intro">
-    <div className="loading-intro-card">
+    <div className="loading-intro-card loading-intro-card-clean">
       <div className="loading-intro-head">
-        <div>
-          <h2>Unos količina za utovar</h2>
-          <p>Unesi koliko fizičkih boksova ide u prikolicu. Prazno polje se računa kao 0.</p>
-        </div>
-        <div className="intro-total"><span>Ukupno</span><b>{total}</b></div>
+        <h2>Unos količina za utovar</h2>
       </div>
 
       <div className="loading-quantity-grid">
@@ -31,7 +26,6 @@ export default function LoadingIntro({ cargoTypes, onContinue, onSkip }) {
             value={counts[type.id] || ''}
             onChange={e => updateCount(type.id, e.target.value)}
           />
-          <small>{type.stackCount || 4} u buntu</small>
         </label>)}
       </div>
 

@@ -11,7 +11,7 @@ import HistoryModule from './components/HistoryModule.jsx';
 import TimeModule from './components/TimeModule.jsx';
 import ProductionModule from './components/ProductionModule.jsx';
 
-import { STORAGE_KEY, PX_PER_METER, MARIJA_EMAIL, TRANSFER_EMAIL, APP_LOGO_SRC, QR_STORAGE_KEY, QR_PRODUCT_TYPES, TRANSFER_STORAGE_KEY, SENT_TRANSFER_STORAGE_KEY, COUNT_STORAGE_KEY, INVENTORY_STORAGE_KEY, BACKUP_SCHEMA_VERSION, APP_QUOTES, DEFAULT_STATE } from './utils/constants.js';
+import { STORAGE_KEY, PX_PER_METER, MARIJA_EMAIL, TRANSFER_EMAIL, APP_LOGO_SRC, QR_STORAGE_KEY, QR_PRODUCT_TYPES, TRANSFER_STORAGE_KEY, SENT_TRANSFER_STORAGE_KEY, COUNT_STORAGE_KEY, INVENTORY_STORAGE_KEY, PRODUCTION_WRITEOFF_STORAGE_KEY, BACKUP_SCHEMA_VERSION, APP_QUOTES, DEFAULT_STATE } from './utils/constants.js';
 import { clamp, rectsOverlap, boxRect, snapBoxPosition, makeBoxesFromTypes, snapToGrid, rangesOverlap, LANES } from './utils/trailerUtils.js';
 import { makePlannedBoxes } from './utils/loadingPlanner.js';
 import { createThumbnail } from './utils/thumbnailUtils.js';
@@ -19,6 +19,7 @@ import { formatDateTime, formatMeters } from './utils/formatUtils.js';
 import { encodeSharePayload, decodeSharePayload, buildSharePayload } from './utils/shareUtils.js';
 import { formatQrRowsForEmail, todayIsoDate, todaySrDate, downloadScanningXlsx, formatTransferRowsForEmail, downloadTransferXlsx } from './utils/excelUtils.js';
 import { downloadJsonFile, readFileAsText, readImageFiles, matchesQuery } from './utils/fileUtils.js';
+import { artDigits, normalizeArtNumber, normalizeWarehouseLocation } from './utils/dataFormat.js';
 
 
 export default function App() {
@@ -56,6 +57,9 @@ export default function App() {
   const [inventory, setInventory] = useState(() => {
     try { return JSON.parse(localStorage.getItem(INVENTORY_STORAGE_KEY)) || []; } catch { return []; }
   });
+  const [productionWriteoffs, setProductionWriteoffs] = useState(() => {
+    try { return JSON.parse(localStorage.getItem(PRODUCTION_WRITEOFF_STORAGE_KEY)) || []; } catch { return []; }
+  });
   const [transferForm, setTransferForm] = useState({ art: '', qty: '', from: '', to: '', note: '' });
   const [countForm, setCountForm] = useState({ art: '', qty: '', position: '', note: '' });
   const [inventoryForm, setInventoryForm] = useState({ art: '', name: '', qty: '', position: '', note: '' });
@@ -84,6 +88,7 @@ export default function App() {
   useEffect(() => { localStorage.setItem(SENT_TRANSFER_STORAGE_KEY, JSON.stringify(sentTransfers)); }, [sentTransfers]);
   useEffect(() => { localStorage.setItem(COUNT_STORAGE_KEY, JSON.stringify(counts)); }, [counts]);
   useEffect(() => { localStorage.setItem(INVENTORY_STORAGE_KEY, JSON.stringify(inventory)); }, [inventory]);
+  useEffect(() => { localStorage.setItem(PRODUCTION_WRITEOFF_STORAGE_KEY, JSON.stringify(productionWriteoffs)); }, [productionWriteoffs]);
   useEffect(() => {
     const quoteTimer = setInterval(() => setQuoteIndex(i => (i + 1) % APP_QUOTES.length), 5 * 60 * 1000);
     const clockTimer = setInterval(() => setNow(new Date()), 60 * 1000);
@@ -193,41 +198,32 @@ export default function App() {
       id: row.id,
       type: 'Skeniranje',
       icon: '📦',
-      createdAt: row.createdAt,
+      createdAt: row.createdAt || row.updatedAt,
       title: `CPR ${row.cpr || row.boxNumber || index + 1}`,
-      summary: `Boks: ${row.boxNumber || '-'} · ${row.productType || '-'}${row.description ? ` · ${row.description}` : ''}`,
+      summary: `Boks: ${row.boxNumber || '-'} · ${row.productType || '-'}`,
       searchText: JSON.stringify(row)
     }));
     const transferItems = [...transfers, ...sentTransfers].map(row => ({
       id: row.id,
       type: 'Dopuna',
       icon: '🔄',
-      createdAt: row.createdAt,
-      title: `Art ${row.art || '-'}`,
+      createdAt: row.createdAt || row.sentAt,
+      title: `ART ${row.art || '-'}`,
       summary: `Količina: ${row.qty || '-'} · Bulk: ${row.from || '-'} · Pick: ${row.to || '-'}${row.note ? ` · ${row.note}` : ''}`,
       searchText: JSON.stringify(row)
     }));
-    const countItems = counts.map(row => ({
+    const productionItems = (productionWriteoffs || []).map(row => ({
       id: row.id,
-      type: 'Brojanje',
-      icon: '🔢',
-      createdAt: row.createdAt,
-      title: `Art ${row.art || '-'}`,
-      summary: `Količina: ${row.qty || '-'} · Pozicija: ${row.position || '-'}${row.note ? ` · ${row.note}` : ''}`,
-      searchText: JSON.stringify(row)
-    }));
-    const inventoryItems = inventory.map(row => ({
-      id: row.id,
-      type: 'Inventar',
-      icon: '📊',
+      type: 'Proizvodnja',
+      icon: '✕',
       createdAt: row.updatedAt || row.createdAt,
-      title: `${row.art || '-'} ${row.name ? `· ${row.name}` : ''}`,
-      summary: `Stanje: ${row.qty || '-'} · Pozicija: ${row.position || '-'}${row.note ? ` · ${row.note}` : ''}`,
+      title: `${row.art || '-'} · ${row.pickLocation || '-'}`,
+      summary: `Otpis: ${row.quantity || '-'} · Lokacija: ${row.pickLocation || '-'}`,
       searchText: JSON.stringify(row)
     }));
-    return [...loads, ...scans, ...transferItems, ...countItems, ...inventoryItems]
+    return [...loads, ...scans, ...transferItems, ...productionItems]
       .sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0));
-  }, [state.savedLoads, qrRows, transfers, sentTransfers, counts, inventory]);
+  }, [state.savedLoads, qrRows, transfers, sentTransfers, productionWriteoffs]);
   const filteredHistory = useMemo(() => allHistory.filter(item => {
     const dateText = item.createdAt ? `${formatDateTime(item.createdAt)} ${new Date(item.createdAt).toISOString().slice(0, 10)}` : '';
     return matchesQuery(`${item.type} ${item.title} ${item.summary} ${dateText} ${item.searchText}`, historySearch);
@@ -588,8 +584,8 @@ Pozdrav`);
   }
 
   function saveTransferRecord() {
-    const artDigits = String(transferForm.art || '').replace(/\D/g, '').slice(0, 6);
-    if (artDigits.length !== 6) {
+    const digits = artDigits(transferForm.art);
+    if (digits.length !== 6) {
       alert('Art nije kompletan');
       return;
     }
@@ -597,14 +593,21 @@ Pozdrav`);
       alert('Unesi količinu.');
       return;
     }
-    const record = { id: crypto.randomUUID(), createdAt: new Date().toISOString(), ...transferForm, art: `ART-${artDigits}` };
+    const record = {
+      id: crypto.randomUUID(),
+      createdAt: new Date().toISOString(),
+      ...transferForm,
+      art: `ART-${digits}`,
+      from: normalizeWarehouseLocation(transferForm.from),
+      to: normalizeWarehouseLocation(transferForm.to)
+    };
     setTransfers(rows => [record, ...rows]);
     setTransferForm({ art: '', qty: '', from: '', to: '', note: '' });
   }
 
   function saveCountRecord() {
     if (!countForm.art.trim() && !countForm.qty.trim()) return;
-    const record = { id: crypto.randomUUID(), createdAt: new Date().toISOString(), ...countForm };
+    const record = { id: crypto.randomUUID(), createdAt: new Date().toISOString(), ...countForm, art: normalizeArtNumber(countForm.art) || countForm.art, position: normalizeWarehouseLocation(countForm.position) || countForm.position };
     setCounts(rows => [record, ...rows]);
     setCountForm({ art: '', qty: '', position: '', note: '' });
   }
@@ -612,7 +615,7 @@ Pozdrav`);
 
   function saveInventoryItem() {
     if (!inventoryForm.art.trim() && !inventoryForm.name.trim()) return;
-    const record = { id: crypto.randomUUID(), createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(), photos: [], ...inventoryForm };
+    const record = { id: crypto.randomUUID(), createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(), photos: [], ...inventoryForm, art: normalizeArtNumber(inventoryForm.art) || inventoryForm.art, position: normalizeWarehouseLocation(inventoryForm.position) || inventoryForm.position };
     setInventory(rows => [record, ...rows]);
     setInventoryForm({ art: '', name: '', qty: '', position: '', note: '' });
   }
@@ -640,7 +643,8 @@ Pozdrav`);
       transfers,
       sentTransfers,
       counts,
-      inventory
+      inventory,
+      productionWriteoffs
     };
     downloadJsonFile(`verano-backup-${todayIsoDate()}.json`, backup);
   }
@@ -660,11 +664,23 @@ Pozdrav`);
       setSentTransfers(backup.sentTransfers || []);
       setCounts(backup.counts || []);
       setInventory(backup.inventory || []);
+      setProductionWriteoffs(backup.productionWriteoffs || []);
       alert('Backup je vraćen.');
     } catch (err) {
       console.error(err);
       alert('Backup nije mogao da se učita.');
     }
+  }
+
+
+  function resetHistory() {
+    if (!confirm('Obrisati istoriju utovara, skeniranja, dopuna i otpisa?')) return;
+    setState(s => ({ ...s, savedLoads: [] }));
+    setQrRows([]);
+    setTransfers([]);
+    setSentTransfers([]);
+    setProductionWriteoffs([]);
+    try { localStorage.setItem(PRODUCTION_WRITEOFF_STORAGE_KEY, JSON.stringify([])); } catch {}
   }
 
   function moduleTitle() {
@@ -708,14 +724,19 @@ Pozdrav`);
   const trailerStyle = { width: toPx(state.trailer.length), height: trailerHeight };
   const workInfo = getWorkTimeInfo();
 
-  const ModuleHeader = ({ children }) => <header className="module-header">
-    <button className="back-home" onClick={() => openModule('home')}><ArrowLeft size={17}/> Početna</button>
-    <h1>{moduleTitle()}</h1>
-    <div className="module-actions">
-      {children}
-      <button className="ghost" onClick={() => setShowInstructions(true)}>Uputstvo</button>
-    </div>
-  </header>;
+  const logisticsViews = new Set(['load', 'scan', 'transfer', 'count', 'history', 'time']);
+  const ModuleHeader = ({ children }) => {
+    const backTarget = logisticsViews.has(appView) ? 'logistics' : 'home';
+    const backLabel = logisticsViews.has(appView) ? 'Logistika' : 'Početna';
+    return <header className="module-header">
+      <button className="back-home" onClick={() => openModule(backTarget)}><ArrowLeft size={17}/> {backLabel}</button>
+      <h1>{moduleTitle()}</h1>
+      <div className="module-actions">
+        {children}
+        <button className="ghost" onClick={() => setShowInstructions(true)}>Uputstvo</button>
+      </div>
+    </header>;
+  };
 
 
   const ctx = {
@@ -739,7 +760,7 @@ Pozdrav`);
     inventorySearch, setInventorySearch, updateInventoryItem, deleteInventoryItem,
     uploadInventoryPhotos, removeInventoryPhoto, countForm, setCountForm,
     saveCountRecord, counts, historySearch, setHistorySearch, filteredHistory,
-    downloadBackup, restoreBackup, now, workInfo, formatDateTime, sentTransfers, inventory, clamp, ModuleHeader
+    downloadBackup, restoreBackup, now, workInfo, formatDateTime, sentTransfers, inventory, productionWriteoffs, setProductionWriteoffs, resetHistory, clamp, ModuleHeader
   };
 
   return <main className={`app app-${appView}`} onPointerMove={onPointerMove} onPointerUp={onPointerUp}>

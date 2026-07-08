@@ -1,5 +1,6 @@
 import React from 'react';
 import { Trash2, Plus, RotateCcw, Save, X, MousePointer2, Grid3X3, Upload, Copy, Send, FileSpreadsheet, ArrowLeft, Clock3, Search, Download, UploadCloud, Image as ImageIcon } from 'lucide-react';
+import { cleanLocationInput, normalizeWarehouseLocation } from '../utils/dataFormat.js';
 
 
 export default function InventoryModule({ ctx }) {
@@ -27,10 +28,10 @@ export default function InventoryModule({ ctx }) {
       <section className="simple-module inventory-module">
         <h2>Inventar / stanje materijala</h2>
         <div className="form-grid">
-          <input placeholder="Art" value={inventoryForm.art} onChange={e => setInventoryForm(f => ({...f, art:e.target.value}))}/>
+          <input placeholder="Art" value={inventoryForm.art} onChange={e => setInventoryForm(f => ({...f, art:e.target.value.toUpperCase()}))}/>
           <input placeholder="Naziv / opis artikla" value={inventoryForm.name} onChange={e => setInventoryForm(f => ({...f, name:e.target.value}))}/>
           <input placeholder="Količina" value={inventoryForm.qty} onChange={e => setInventoryForm(f => ({...f, qty:e.target.value}))}/>
-          <input placeholder="Pozicija" value={inventoryForm.position} onChange={e => setInventoryForm(f => ({...f, position:e.target.value}))}/>
+          <input placeholder="Pozicija" value={inventoryForm.position} onChange={e => setInventoryForm(f => ({...f, position:cleanLocationInput(e.target.value)}))} onBlur={e => setInventoryForm(f => ({...f, position:normalizeWarehouseLocation(e.target.value)}))}/>
           <input className="wide" placeholder="Napomena" value={inventoryForm.note} onChange={e => setInventoryForm(f => ({...f, note:e.target.value}))}/>
           <button className="wide" onClick={saveInventoryItem}><Plus size={16}/> Dodaj u inventar</button>
         </div>
@@ -46,7 +47,7 @@ export default function InventoryModule({ ctx }) {
             <div className="inventory-head"><b>{item.art || '-'} {item.name ? `· ${item.name}` : ''}</b><button className="icon-danger" onClick={() => deleteInventoryItem(item.id)}><Trash2 size={15}/></button></div>
             <div className="inventory-fields">
               <label>Količina<input value={item.qty || ''} onChange={e => updateInventoryItem(item.id, { qty: e.target.value })}/></label>
-              <label>Pozicija<input value={item.position || ''} onChange={e => updateInventoryItem(item.id, { position: e.target.value })}/></label>
+              <label>Pozicija<input value={item.position || ''} onChange={e => updateInventoryItem(item.id, { position: cleanLocationInput(e.target.value) })} onBlur={e => updateInventoryItem(item.id, { position: normalizeWarehouseLocation(e.target.value) })}/></label>
               <label className="wide">Napomena<input value={item.note || ''} onChange={e => updateInventoryItem(item.id, { note: e.target.value })}/></label>
             </div>
             <div className="inventory-photos">
@@ -58,6 +59,6 @@ export default function InventoryModule({ ctx }) {
         </div>
       </section>
 
-      <section className="simple-module"><h2>Brzo brojanje</h2><div className="form-grid"><input placeholder="Art" value={countForm.art} onChange={e => setCountForm(f => ({...f, art:e.target.value}))}/><input placeholder="Količina" value={countForm.qty} onChange={e => setCountForm(f => ({...f, qty:e.target.value}))}/><input placeholder="Pozicija" value={countForm.position} onChange={e => setCountForm(f => ({...f, position:e.target.value}))}/><input className="wide" placeholder="Opis / napomena" value={countForm.note} onChange={e => setCountForm(f => ({...f, note:e.target.value}))}/><button onClick={saveCountRecord}><Save size={16}/> Sačuvaj brojanje</button></div><div className="record-list">{counts.length===0 && <p className="empty-card">Još nema brojanja.</p>}{counts.map(r => <div className="record-card" key={r.id}><b>{r.art || '-'}</b><span>{r.qty || '-'} kom</span><span>Pozicija: {r.position || '-'}</span><small>{formatDateTime(r.createdAt)}</small><p>{r.note}</p></div>)}</div></section>
+      <section className="simple-module"><h2>Brzo brojanje</h2><div className="form-grid"><input placeholder="Art" value={countForm.art} onChange={e => setCountForm(f => ({...f, art:e.target.value.toUpperCase()}))}/><input placeholder="Količina" value={countForm.qty} onChange={e => setCountForm(f => ({...f, qty:e.target.value}))}/><input placeholder="Pozicija" value={countForm.position} onChange={e => setCountForm(f => ({...f, position:cleanLocationInput(e.target.value)}))} onBlur={e => setCountForm(f => ({...f, position:normalizeWarehouseLocation(e.target.value)}))}/><input className="wide" placeholder="Opis / napomena" value={countForm.note} onChange={e => setCountForm(f => ({...f, note:e.target.value}))}/><button onClick={saveCountRecord}><Save size={16}/> Sačuvaj brojanje</button></div><div className="record-list">{counts.length===0 && <p className="empty-card">Još nema brojanja.</p>}{counts.map(r => <div className="record-card" key={r.id}><b>{r.art || '-'}</b><span>{r.qty || '-'} kom</span><span>Pozicija: {r.position || '-'}</span><small>{formatDateTime(r.createdAt)}</small><p>{r.note}</p></div>)}</div></section>
     </>;
 }

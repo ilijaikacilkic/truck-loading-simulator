@@ -25,13 +25,12 @@ export default function LoadingSimulator({ ctx }) {
   saveCountRecord, counts, historySearch, setHistorySearch, filteredHistory,
   downloadBackup, restoreBackup, now, workInfo, formatDateTime, sentTransfers, inventory, clamp, ModuleHeader } = ctx;
   return appView === 'load' && <>
-      <ModuleHeader><div className={validation.valid ? 'status ok' : 'status bad'}>{validation.valid ? 'Sve staje' : 'NEMA MESTA'} · Ukupno boksova: {totalPlacedBoxCount}</div></ModuleHeader>
+      <ModuleHeader />
       {showLoadIntro && <LoadingIntro cargoTypes={state.cargoTypes} onContinue={applyLoadingQuantities} onSkip={skipLoadingQuantities} />}
       {!showLoadIntro && <>
       <section className="metrics">
         <label>Dužina prikolice <input type="number" step="0.1" value={state.trailer.length} onChange={e => updateTrailer('length', e.target.value)} /> m</label>
         <label>Širina / dubina prikolice <input type="number" step="0.05" value={state.trailer.width} onChange={e => updateTrailer('width', e.target.value)} /> m</label>
-        <div><b>{totalPlacedBoxCount}</b> ukupno boksova</div>
         <div><b>{validation.usedArea.toFixed(2)}m²</b> iskorišćeno / {validation.trailerArea.toFixed(2)}m²</div>
         <div><b>{Math.round((validation.usedArea / validation.trailerArea) * 100) || 0}%</b> popunjeno</div>
       </section>
@@ -46,6 +45,10 @@ export default function LoadingSimulator({ ctx }) {
 
       <section className="workspace">
         <section className="main-area">
+          <div className="load-status-row">
+            <span className={validation.valid ? 'status ok' : 'status bad'}>{validation.valid ? 'Sve staje' : 'NEMA MESTA'}</span>
+            <span className="load-total-boxes">Ukupno boksova: <b>{totalPlacedBoxCount}</b></span>
+          </div>
           <div className="trailer-wrap compact-trailer-wrap">
             <div className="dim dim-top">{state.trailer.length} m</div>
             <div className={`trailer ${validation.valid ? '' : 'bad-trailer'}`} ref={trailerRef} style={trailerStyle} onPointerDown={placeSelectedAt}>

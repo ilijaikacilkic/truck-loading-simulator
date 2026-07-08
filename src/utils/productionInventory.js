@@ -1,3 +1,5 @@
+import { normalizeWarehouseLocation, uppercaseText } from './dataFormat.js';
+
 export const PRODUCTION_ARTICLE_LOCATIONS = [
   { art: 'ART-001181', location: 'RS 20 AL 02' },
   { art: 'ART-001138', location: 'RS 20 AL 03' },
@@ -170,23 +172,11 @@ export const PRODUCTION_ARTICLE_LOCATIONS = [
 ];
 
 export function normalizeProductionLocation(value) {
-  const raw = String(value || '').trim().toUpperCase();
-  if (!raw) return '';
-
-  // Radnik može da unese samo AL12, AL 12, ap20, RS20AP20 itd.
-  // Aplikacija to pretvara u standardni format: RS 20 AL 12.
-  const compact = raw.replace(/[^A-Z0-9]/g, '');
-  const match = compact.match(/^(?:RS20)?([A-Z]{2})(\d{1,2})$/);
-  if (match) {
-    const [, row, number] = match;
-    return `RS 20 ${row} ${number.padStart(2, '0')}`;
-  }
-
-  return raw.replace(/\s+/g, ' ');
+  return normalizeWarehouseLocation(value);
 }
 
 export function uppercaseProductionLocation(value) {
-  return String(value || '').toUpperCase();
+  return uppercaseText(value);
 }
 
 export function findArticleByLocation(location) {

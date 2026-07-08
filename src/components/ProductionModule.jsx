@@ -3,8 +3,6 @@ import { ArrowLeft, Download, Plus, Search, Trash2 } from 'lucide-react';
 import { downloadProductionWriteoffXlsx } from '../utils/excelUtils.js';
 import { PRODUCTION_ARTICLE_LOCATIONS, findArticleByLocation, normalizeProductionLocation, uppercaseProductionLocation } from '../utils/productionInventory.js';
 
-const WRITEOFF_STORAGE_KEY = 'productionWriteoffRowsV2';
-
 function parseQuantity(value) {
   const normalized = String(value || '')
     .replace(',', '.')
@@ -30,21 +28,13 @@ function formatTime(value) {
   }
 }
 
-function loadStoredWriteoffRows() {
-  try {
-    return JSON.parse(localStorage.getItem(WRITEOFF_STORAGE_KEY) || '[]');
-  } catch {
-    return [];
-  }
-}
-
 export default function ProductionModule({ ctx }) {
-  const { appView, ModuleHeader } = ctx;
+  const { appView, ModuleHeader, productionWriteoffs = [], setProductionWriteoffs } = ctx;
   const [screen, setScreen] = useState('menu');
   const [pickLocation, setPickLocation] = useState('');
   const [quantity, setQuantity] = useState('');
   const [search, setSearch] = useState('');
-  const [items, setItems] = useState(loadStoredWriteoffRows);
+  const items = productionWriteoffs;
 
   const selectedArticle = useMemo(() => findArticleByLocation(pickLocation), [pickLocation]);
   const totalMeters = useMemo(
@@ -63,8 +53,7 @@ export default function ProductionModule({ ctx }) {
   if (appView !== 'production') return null;
 
   function commitItems(nextItems) {
-    setItems(nextItems);
-    try { localStorage.setItem(WRITEOFF_STORAGE_KEY, JSON.stringify(nextItems)); } catch {}
+    setProductionWriteoffs?.(nextItems);
   }
 
   function addWriteoffItem(event) {
@@ -159,7 +148,6 @@ export default function ProductionModule({ ctx }) {
           <button className="ghost" onClick={() => setScreen('menu')}><ArrowLeft size={16}/> Nazad</button>
           <div>
             <h2>Otpis</h2>
-            <p>Unesi lokaciju i metražu. Aplikacija sama nalazi ART i sabira ako ista lokacija već postoji.</p>
           </div>
         </div>
 
@@ -249,7 +237,7 @@ export default function ProductionModule({ ctx }) {
           </div>
         ) : (
           <div className="empty-card writeoff-empty">
-            Još nema dodatih stavki. Kada dodaš istu lokaciju više puta, aplikacija će odmah sabrati metražu i zabeležiti vreme poslednjeg unosa.
+            Nema dodatih otpisa
           </div>
         )}
       </section>
