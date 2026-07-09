@@ -10,6 +10,7 @@ import InventoryModule from './components/InventoryModule.jsx';
 import HistoryModule from './components/HistoryModule.jsx';
 import TimeModule from './components/TimeModule.jsx';
 import ProductionModule from './components/ProductionModule.jsx';
+import SplashScreen from './components/SplashScreen.jsx';
 
 import { STORAGE_KEY, PX_PER_METER, MARIJA_EMAIL, TRANSFER_EMAIL, APP_LOGO_SRC, QR_STORAGE_KEY, QR_PRODUCT_TYPES, TRANSFER_STORAGE_KEY, SENT_TRANSFER_STORAGE_KEY, COUNT_STORAGE_KEY, INVENTORY_STORAGE_KEY, PRODUCTION_WRITEOFF_STORAGE_KEY, BACKUP_SCHEMA_VERSION, APP_QUOTES, DEFAULT_STATE } from './utils/constants.js';
 import { clamp, rectsOverlap, boxRect, snapBoxPosition, makeBoxesFromTypes, snapToGrid, rangesOverlap, LANES } from './utils/trailerUtils.js';
@@ -51,6 +52,9 @@ export default function App() {
   });
   const [lastPlacedBoxId, setLastPlacedBoxId] = useState(null);
   const [showLoadIntro, setShowLoadIntro] = useState(true);
+  const [showSplash, setShowSplash] = useState(true);
+  const [scanFlash, setScanFlash] = useState(false);
+  const [scanFeed, setScanFeed] = useState([]);
   const [counts, setCounts] = useState(() => {
     try { return JSON.parse(localStorage.getItem(COUNT_STORAGE_KEY)) || []; } catch { return []; }
   });
@@ -79,6 +83,7 @@ export default function App() {
   const qrRowsRef = useRef([]);
   const lastQrScanRef = useRef({ value: '', at: 0 });
   const qrMessageTimerRef = useRef(null);
+  const scanFlashTimerRef = useRef(null);
 
   useEffect(() => { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); }, [state]);
   useEffect(() => { pendingQrRef.current = pendingQr; }, [pendingQr]);
@@ -100,6 +105,11 @@ export default function App() {
     return () => window.removeEventListener('resize', onResize);
   }, []);
 
+
+  useEffect(() => {
+    const splashTimer = setTimeout(() => setShowSplash(false), 1800);
+    return () => clearTimeout(splashTimer);
+  }, []);
 
   useEffect(() => {
     const hash = window.location.hash || '';
@@ -426,6 +436,17 @@ Težina tereta: ${load.cargoWeight || '-'}`);
     return String(value || '').trim();
   }
 
+  function pushScanFeed(value, kind = 'product') {
+    const entry = { id: makeId(), value, kind };
+    setScanFeed(feed => [entry, ...feed].slice(0, 4));
+    setScanFlash(true);
+    if (scanFlashTimerRef.current) clearTimeout(scanFlashTimerRef.current);
+    scanFlashTimerRef.current = setTimeout(() => setScanFlash(false), 360);
+    setTimeout(() => {
+      setScanFeed(feed => feed.filter(item => item.id !== entry.id));
+    }, 2200);
+  }
+
   function handleScannedQr(rawValue) {
     const value = normalizeQrValue(rawValue);
     if (!value) return;
@@ -436,6 +457,7 @@ Težina tereta: ${load.cargoWeight || '-'}`);
 
     if (navigator.vibrate) navigator.vibrate(35);
     setScannerError('');
+    pushScanFeed(value, qrScanKindRef.current);
 
     if (qrScanKindRef.current === 'box') {
       setQrRows(rows => {
@@ -752,6 +774,7 @@ Pozdrav`);
     emailShare, loadSavedLoad, deleteSavedLoad, qrMode, pendingQr,
     manualQrValue, setManualQrValue, addManualQr, scannerError, videoRef,
     qrScanKind, setQrScanKind, qrScanMessage, applyQrProductType, undoLastQrRow,
+    scanFlash, scanFeed,
     QR_PRODUCT_TYPES, confirmQrType, setPendingQr, qrRows, emailMarija,
     copyQrTable, downloadScanningXlsx, setQrRows, updateQrRow, deleteQrRow,
     transferForm, setTransferForm, saveTransferRecord, exportTransferExcel,
@@ -764,6 +787,7 @@ Pozdrav`);
   };
 
   return <main className={`app app-${appView}`} onPointerMove={onPointerMove} onPointerUp={onPointerUp}>
+    <SplashScreen visible={showSplash} />
     <HomeScreen ctx={ctx} />
 
     <InstructionModal ctx={ctx} />

@@ -1,5 +1,5 @@
-import React from 'react';
-import { Trash2, QrCode, Camera, Send, Copy, FileSpreadsheet, Undo2, Box, PackageCheck } from 'lucide-react';
+import React, { useMemo, useState } from 'react';
+import { Trash2, QrCode, Camera, Send, Copy, FileSpreadsheet, Undo2, Box, PackageCheck, Pencil, ArrowRightLeft, X } from 'lucide-react';
 
 export default function ScannerModule({ ctx }) {
   const {
@@ -7,14 +7,57 @@ export default function ScannerModule({ ctx }) {
     qrScanKind, setQrScanKind, qrScanMessage, QR_PRODUCT_TYPES,
     manualQrValue, setManualQrValue, addManualQr, applyQrProductType,
     updateQrRow, deleteQrRow, undoLastQrRow, emailMarija, copyQrTable,
-    downloadScanningXlsx
+    downloadScanningXlsx, scanFlash, scanFeed
   } = ctx;
 
-  if (appView !== 'scan') return null;
+  const [editingBox, setEditingBox] = useState('');
 
   const waitingRows = qrRows.filter(row => !row.boxNumber);
   const completedRows = qrRows.filter(row => row.boxNumber);
   const rowsWithoutType = qrRows.filter(row => !row.productType);
+
+  const boxGroups = useMemo(() => {
+    const map = new Map();
+    completedRows.forEach(row => {
+      const key = String(row.boxNumber || '').trim();
+      if (!map.has(key)) map.set(key, []);
+      map.get(key).push(row);
+    });
+    return [...map.entries()].map(([boxNumber, rows]) => {
+      const types = [...new Set(rows.map(row => row.productType).filter(Boolean))];
+      const groupType = !types.length ? 'Bez tipa' : types.length === 1 ? types[0] : 'Mixed';
+      return { boxNumber, rows, groupType };
+    });
+  }, [completedRows]);
+
+  const boxTypeStats = useMemo(() => {
+    const stats = {};
+    boxGroups.forEach(group => {
+      stats[group.groupType] = (stats[group.groupType] || 0) + 1;
+    });
+    return Object.entries(stats);
+  }, [boxGroups]);
+
+  if (appView !== 'scan') return null;
+
+  function deleteBox(boxNumber) {
+    if (!confirm(`Obrisati ceo boks ${boxNumber} iz liste?`)) return;
+    setQrRows(rows => rows.filter(row => row.boxNumber !== boxNumber));
+    if (editingBox === boxNumber) setEditingBox('');
+  }
+
+  function moveRowToBox(row) {
+    const nextBox = prompt('Unesi novi boks za ovaj CPR:', row.boxNumber || '');
+    if (nextBox === null) return;
+    const clean = nextBox.trim();
+    if (!clean) return;
+    updateQrRow(row.id, { boxNumber: clean, updatedAt: new Date().toISOString() });
+  }
+
+  function removeRowFromBox(row) {
+    if (!confirm(`Izvaditi ${row.cpr || 'CPR'} iz boksa?`)) return;
+    updateQrRow(row.id, { boxNumber: '', updatedAt: new Date().toISOString() });
+  }
 
   return <>
     <ModuleHeader />
@@ -24,9 +67,8 @@ export default function ScannerModule({ ctx }) {
           <div className="qr-scanner-head">
             <div>
               <h2><QrCode size={22}/> Skeniranje</h2>
-              
             </div>
-            <span className="qr-count">{qrRows.length} CPR</span>
+            <span className="qr-count">{boxGroups.length} boksova</span>
           </div>
 
           <div className="scan-toggle-row">
@@ -45,7 +87,18 @@ export default function ScannerModule({ ctx }) {
             <span>Na čekanju: <b>{waitingRows.length}</b></span>
           </div>
 
-          <div className="camera-box"><video ref={videoRef} muted playsInline /><div className="scan-frame"><Camera size={30}/><span>{qrScanKind === 'product' ? 'Usmeri kameru ka QR kodu proizvoda' : 'Usmeri kameru ka QR kodu boksa'}</span></div></div>
+          <div className={`camera-box ${qrScanKind === 'box' ? 'box-mode' : 'product-mode'} ${scanFlash ? 'scan-success' : ''}`}>
+            <video ref={videoRef} muted playsInline />
+            <div className="scan-frame"><Camera size={30}/></div>
+            <div className="scan-feed">
+              {scanFeed.map(item => (
+                <div key={item.id} className={`scan-feed-item ${item.kind === 'box' ? 'is-box' : 'is-product'}`}>
+                  <small>{item.kind === 'box' ? 'BOKS' : 'CPR'}</small>
+                  <strong>{item.value}</strong>
+                </div>
+              ))}
+            </div>
+          </div>
           {(scannerError || qrScanMessage) && <div className={scannerError ? 'scanner-error' : 'scanner-message'}>{scannerError || qrScanMessage}</div>}
 
           <div className="manual-scan">
@@ -58,16 +111,91 @@ export default function ScannerModule({ ctx }) {
       <div className="qr-product-panel">
         <div>
           <h3>Tip robe</h3>
+          <p>Klik na tip robe popunjava sve skenirane stavke koje još nemaju dodeljen tip.</p>
         </div>
         <div className="qr-product-buttons">
           {QR_PRODUCT_TYPES.map(type => <button key={type} onClick={() => applyQrProductType(type)} disabled={!rowsWithoutType.length}>{type}<small>Popuni {rowsWithoutType.length || 0}</small></button>)}
         </div>
       </div>
 
+      <div className="scanner-summary-panel">
+        <div className="scanner-summary-head">
+          <div>
+            <h2>Skenirani boksovi</h2>
+            <p>{boxGroups.length} boksova · {waitingRows.length} CPR na čekanju</p>
+          </div>
+          <div className="scanner-summary-chips">
+            {boxTypeStats.map(([label, count]) => (
+              <span key={label} className="summary-chip">{label}: <b>{count}</b></span>
+            ))}
+          </div>
+        </div>
+
+        {!!waitingRows.length && (
+          <div className="waiting-rows-panel">
+            <h3>CPR na čekanju</h3>
+            <div className="waiting-rows-list">
+              {waitingRows.map(row => (
+                <span key={row.id} className="waiting-row-chip">{row.cpr}</span>
+              ))}
+            </div>
+          </div>
+        )}
+
+        <div className="box-groups-grid">
+          {!boxGroups.length && !waitingRows.length && (
+            <div className="empty-card">Još nema skeniranih boksova.</div>
+          )}
+
+          {boxGroups.map(group => {
+            const isEditing = editingBox === group.boxNumber;
+            return <article key={group.boxNumber} className="box-group-card">
+              <div className="box-group-head">
+                <div>
+                  <span className="box-group-label">Boks</span>
+                  <h3>{group.boxNumber}</h3>
+                </div>
+                <div className="box-group-badges">
+                  <span className={`box-group-type ${group.groupType === 'Mixed' ? 'mixed' : ''}`}>{group.groupType}</span>
+                  <span className="box-group-size">{group.rows.length} CPR</span>
+                </div>
+              </div>
+
+              <div className="box-group-actions">
+                <button className="ghost" onClick={() => setEditingBox(isEditing ? '' : group.boxNumber)}><Pencil size={14}/> {isEditing ? 'Zatvori' : 'Uredi boks'}</button>
+                <button className="danger" onClick={() => deleteBox(group.boxNumber)}><Trash2 size={14}/> Izbriši boks</button>
+              </div>
+
+              <div className="box-group-list">
+                {group.rows.map(row => (
+                  <div key={row.id} className="box-group-row">
+                    <div className="box-group-cpr">{row.cpr || '-'}</div>
+                    <div className="box-group-meta">
+                      {isEditing ? (
+                        <select value={row.productType || ''} onChange={e => updateQrRow(row.id, { productType: e.target.value, updatedAt: new Date().toISOString() })}>
+                          <option value="">Bez tipa</option>
+                          {QR_PRODUCT_TYPES.map(type => <option key={type} value={type}>{type}</option>)}
+                        </select>
+                      ) : <span>{row.productType || 'Bez tipa'}</span>}
+                      <span>{group.boxNumber}</span>
+                    </div>
+                    {isEditing && <div className="box-row-actions">
+                      <button className="ghost" onClick={() => moveRowToBox(row)}><ArrowRightLeft size={14}/> Prebaci</button>
+                      <button className="ghost" onClick={() => removeRowFromBox(row)}><X size={14}/> Izvadi</button>
+                      <button className="danger" onClick={() => deleteQrRow(row.id)}><Trash2 size={14}/> Obriši</button>
+                    </div>}
+                  </div>
+                ))}
+              </div>
+            </article>;
+          })}
+        </div>
+      </div>
+
       <div className="qr-table-section">
         <div className="qr-table-title">
           <div>
-            <h2>Scanning tabela</h2>
+            <h2>Detaljna tabela</h2>
             <p>{completedRows.length} povezano · {waitingRows.length} čeka boks</p>
           </div>
           <div className="qr-actions">
