@@ -6,7 +6,7 @@ export default function SplashScreen({ visible }) {
   return (
     <div className="splash-screen clean-splash" aria-hidden="true">
       <div className="clean-splash-inner">
-        <h1>Verano</h1>
+        <img src="/logo.png" alt="Verano" className="clean-splash-logo" />
         <p>Make this your moment</p>
       </div>
     </div>
