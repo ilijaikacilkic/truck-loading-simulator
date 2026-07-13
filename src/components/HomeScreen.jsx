@@ -26,11 +26,6 @@ function shortTime(dateLike) {
   return d.toLocaleTimeString('sr-RS', { hour: '2-digit', minute: '2-digit' });
 }
 
-function formatDashboardDate(dateLike = new Date()) {
-  const d = new Date(dateLike);
-  return d.toLocaleDateString('sr-RS', { weekday: 'long', day: '2-digit', month: 'long', year: 'numeric' });
-}
-
 function buildActivity(ctx) {
   const {
     state,
@@ -81,8 +76,8 @@ function ActivityPanel({ ctx }) {
   return <section className="home-activity-card">
     <div className="activity-heading">
       <div>
-        <h2>Aktivnosti</h2>
-        <p className="activity-date">{formatDashboardDate(ctx.now)}</p>
+        <span>Aktivnost</span>
+        <h2>Danas</h2>
       </div>
       <button className="activity-history-link" onClick={() => ctx.openModule('history')}><History size={16}/> Istorija</button>
     </div>
@@ -106,10 +101,14 @@ function ActivityPanel({ ctx }) {
 }
 
 export default function HomeScreen({ ctx }) {
-  const { appView, openModule } = ctx;
+  const { appView, APP_LOGO_SRC, openModule } = ctx;
 
   if (appView === 'home') {
     return <section className="home-screen home-dashboard-screen">
+      <div className="dashboard-topbar">
+        <img className="dashboard-logo" src={APP_LOGO_SRC} alt="Verano" />
+      </div>
+
       <div className="dashboard-welcome-card">
         <div>
           <h1>Dobro jutro, Ilija</h1>
