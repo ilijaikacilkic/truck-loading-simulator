@@ -1,15 +1,33 @@
-import React, { useRef, useState } from 'react';
-import { Trash2, Plus, FileSpreadsheet, Mail, UploadCloud, ClipboardList, RotateCcw, Share2 } from 'lucide-react';
+import React, { useEffect, useRef, useState } from 'react';
+import { Trash2, Plus, FileSpreadsheet, Mail, UploadCloud, ClipboardList, ArrowLeft } from 'lucide-react';
 import { TRANSFER_EMAIL } from '../utils/constants.js';
 import { cleanLocationInput, normalizeArtNumber, normalizeWarehouseLocation } from '../utils/dataFormat.js';
 import {
   downloadDailyRefillXlsx,
   formatDailyRefillRowsForEmail,
   makeDailyRefillFilename,
-  makeDailyRefillXlsxFile,
   parseDailyRefillXlsx,
   todaySrDate
 } from '../utils/excelUtils.js';
+
+const DAILY_REFILL_DRAFT_KEY = 'verano-daily-refill-draft-v1';
+
+function loadDailyDraft() {
+  try {
+    const saved = JSON.parse(localStorage.getItem(DAILY_REFILL_DRAFT_KEY));
+    if (!saved || !Array.isArray(saved.rows)) return { rows: [], fileName: '', savedAt: '' };
+    return { rows: saved.rows, fileName: saved.fileName || '', savedAt: saved.savedAt || '' };
+  } catch {
+    return { rows: [], fileName: '', savedAt: '' };
+  }
+}
+
+function autosaveTimeLabel(iso) {
+  if (!iso) return 'Autosave uključen';
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return 'Autosave uključen';
+  return `Sačuvano ${d.toLocaleTimeString('sr-RS', { hour: '2-digit', minute: '2-digit' })}`;
+}
 
 export default function TransferModule({ ctx }) {
   const {
@@ -17,13 +35,34 @@ export default function TransferModule({ ctx }) {
     emailTransfer, transfers, clearTransfers, deleteTransferRecord, formatDateTime, ModuleHeader
   } = ctx;
 
+  const draft = useRef(loadDailyDraft()).current;
   const [transferView, setTransferView] = useState('manual');
-  const [dailyRows, setDailyRows] = useState([]);
-  const [dailyFileName, setDailyFileName] = useState('');
+  const [dailyRows, setDailyRows] = useState(draft.rows);
+  const [dailyFileName, setDailyFileName] = useState(draft.fileName);
   const [dailyUploadError, setDailyUploadError] = useState('');
   const [dailyLoading, setDailyLoading] = useState(false);
-  const [dailyDocumentNo, setDailyDocumentNo] = useState('A0000000');
+  const [dailySavedAt, setDailySavedAt] = useState(draft.savedAt);
   const fileInputRef = useRef(null);
+  const autosaveTimerRef = useRef(null);
+
+  useEffect(() => {
+    if (autosaveTimerRef.current) clearTimeout(autosaveTimerRef.current);
+    autosaveTimerRef.current = setTimeout(() => {
+      try {
+        if (!dailyRows.length) {
+          localStorage.removeItem(DAILY_REFILL_DRAFT_KEY);
+          setDailySavedAt('');
+          return;
+        }
+        const savedAt = new Date().toISOString();
+        localStorage.setItem(DAILY_REFILL_DRAFT_KEY, JSON.stringify({ rows: dailyRows, fileName: dailyFileName, savedAt }));
+        setDailySavedAt(savedAt);
+      } catch (err) {
+        console.warn('Daily refill autosave failed', err);
+      }
+    }, 500);
+    return () => clearTimeout(autosaveTimerRef.current);
+  }, [dailyRows, dailyFileName]);
 
   if (appView !== 'transfer') return null;
 
@@ -32,6 +71,10 @@ export default function TransferModule({ ctx }) {
 
   async function handleDailyFileUpload(file) {
     if (!file) return;
+    if (dailyRows.length && !confirm('Zameniti trenutni dnevni refil novim Excelom?')) {
+      if (fileInputRef.current) fileInputRef.current.value = '';
+      return;
+    }
     setDailyLoading(true);
     setDailyUploadError('');
     try {
@@ -71,47 +114,12 @@ export default function TransferModule({ ctx }) {
     setDailyRows(rows => rows.filter(row => row.id !== id));
   }
 
-  function clearDailyRefill() {
-    if (!dailyRows.length) return;
-    if (confirm('Obrisati učitani dnevni refil?')) {
-      setDailyRows([]);
-      setDailyFileName('');
-      setDailyUploadError('');
-    }
-  }
-
   function downloadDailyRefill() {
     if (!dailyItemCount) {
       alert('Nema stavki sa popunjenim ART brojem za export.');
       return;
     }
-    downloadDailyRefillXlsx(dailyExportRows, dailyDocumentNo);
-  }
-
-  async function shareDailyRefill() {
-    if (!dailyItemCount) {
-      alert('Nema stavki sa popunjenim ART brojem za export.');
-      return;
-    }
-    const file = makeDailyRefillXlsxFile(dailyExportRows, dailyDocumentNo);
-    const shareData = {
-      title: 'Dnevni refil',
-      text: `Dnevni refil - ${todaySrDate()}`,
-      files: [file]
-    };
-    try {
-      if (navigator.canShare?.({ files: [file] }) && navigator.share) {
-        await navigator.share(shareData);
-      } else {
-        downloadDailyRefillXlsx(dailyExportRows, dailyDocumentNo);
-        alert('Ovaj browser ne podržava direktno deljenje fajla. Excel je skinut, pa ga dodaj ručno u mail.');
-      }
-    } catch (err) {
-      if (err?.name !== 'AbortError') {
-        console.error(err);
-        alert('Deljenje nije uspelo. Excel možeš skinuti dugmetom „Preuzmi Excel”.');
-      }
-    }
+    downloadDailyRefillXlsx(dailyExportRows);
   }
 
   function emailDailyRefill() {
@@ -119,9 +127,20 @@ export default function TransferModule({ ctx }) {
       alert('Nema stavki sa popunjenim ART brojem za export.');
       return;
     }
-    downloadDailyRefillXlsx(dailyExportRows, dailyDocumentNo);
+    downloadDailyRefillXlsx(dailyExportRows);
     const subject = encodeURIComponent(`Dnevni refil - ${todaySrDate()}`);
-    const body = encodeURIComponent(`Dnevni refil\nDatum: ${todaySrDate()}\n\nSkinut je Excel fajl: ${makeDailyRefillFilename()}\n\nU prilogu treba dodati preuzeti Excel fajl.\n\nPregled stavki:\n\n${formatDailyRefillRowsForEmail(dailyExportRows, dailyDocumentNo)}\n\nPozdrav`);
+    const body = encodeURIComponent(`Dnevni refil
+Datum: ${todaySrDate()}
+
+Skinut je Excel fajl: ${makeDailyRefillFilename()}
+
+U prilogu treba dodati preuzeti Excel fajl.
+
+Pregled stavki:
+
+${formatDailyRefillRowsForEmail(dailyExportRows)}
+
+Pozdrav`);
     window.location.href = `mailto:${TRANSFER_EMAIL}?subject=${subject}&body=${body}`;
   }
 
@@ -130,22 +149,20 @@ export default function TransferModule({ ctx }) {
   }
 
   return <>
-    <ModuleHeader>{transferView === 'daily' ? <button className="ghost" onClick={() => setTransferView('manual')}><RotateCcw size={16}/> Ručna dopuna</button> : null}</ModuleHeader>
+    <ModuleHeader>{transferView === 'daily' ? <button className="ghost" onClick={() => setTransferView('manual')}><ArrowLeft size={16}/> Ručna dopuna</button> : null}</ModuleHeader>
 
-    {transferView === 'daily' ? <section className="simple-module daily-refill-module">
-      <div className="daily-refill-head compact-heading">
-        <h2>Dnevni refil</h2>
-        {dailyRows.length > 0 && <div className="daily-refill-count"><span>Stavki sa ART</span><b>{dailyItemCount}</b></div>}
-      </div>
+    {transferView === 'daily' ? <section className="simple-module daily-refill-module daily-refill-module-clean">
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        onChange={e => handleDailyFileUpload(e.target.files?.[0])}
+        hidden
+      />
+
+      {dailyRows.length > 0 && <div className="daily-refill-count-clean"><b>{dailyItemCount}</b><span>stavki</span></div>}
 
       {!dailyRows.length && <div className="daily-upload-zone">
-        <input
-          ref={fileInputRef}
-          type="file"
-          accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-          onChange={e => handleDailyFileUpload(e.target.files?.[0])}
-          hidden
-        />
         <button className="daily-upload-button" onClick={() => fileInputRef.current?.click()} disabled={dailyLoading}>
           <UploadCloud size={46}/>
           <strong>{dailyLoading ? 'Učitavam Excel...' : 'Upload Excel fajla'}</strong>
@@ -154,24 +171,18 @@ export default function TransferModule({ ctx }) {
       </div>}
 
       {dailyRows.length > 0 && <>
-        <div className="daily-refill-toolbar">
-          <div><strong>{dailyFileName || 'Učitani Excel'}</strong></div>
-          <label className="daily-doc-input"><span>Document No.</span><input value={dailyDocumentNo} onChange={e => setDailyDocumentNo(e.target.value.toUpperCase())}/></label>
-          <div className="daily-refill-actions">
+        <div className="daily-refill-toolbar daily-refill-toolbar-clean">
+          <div className="daily-file-block">
+            <strong>{dailyFileName || 'Učitani Excel'}</strong>
+            <small>{autosaveTimeLabel(dailySavedAt)}</small>
+          </div>
+          <div className="daily-refill-actions daily-refill-actions-clean">
             <button className="ghost" onClick={() => fileInputRef.current?.click()}><UploadCloud size={16}/> Drugi Excel</button>
             <button className="ghost" onClick={addEmptyDailyRow}><Plus size={16}/> Dodaj red</button>
             <button className="ghost" onClick={downloadDailyRefill}><FileSpreadsheet size={16}/> Preuzmi Excel</button>
-            <button className="ghost" onClick={shareDailyRefill}><Share2 size={16}/> Podeli Excel</button>
             <button onClick={emailDailyRefill}><Mail size={16}/> Pošalji mail</button>
-            <button className="danger" onClick={clearDailyRefill}><Trash2 size={16}/> Obriši sve</button>
           </div>
-          <input
-            ref={fileInputRef}
-            type="file"
-            accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-            onChange={e => handleDailyFileUpload(e.target.files?.[0])}
-            hidden
-          />
+          {dailyUploadError && <p className="daily-error">{dailyUploadError}</p>}
         </div>
 
         <div className="daily-refill-list daily-refill-list-v145">
@@ -188,6 +199,7 @@ export default function TransferModule({ ctx }) {
                 <label className="daily-pick-field"><span>Pick</span><input value={row.pickLocation || ''} onChange={e => updateDailyRow(row.id, { pickLocation: cleanLocationInput(e.target.value) })} onBlur={e => normalizeDailyLocation(row.id, 'pickLocation', e.target.value)}/></label>
               </div>
               <label className="daily-description-edit"><span>Opis</span><input value={row.description || ''} onChange={e => updateDailyRow(row.id, { description: e.target.value })}/></label>
+              <label className="daily-description-edit daily-note-edit"><span>Napomena</span><input value={row.note || ''} onChange={e => updateDailyRow(row.id, { note: e.target.value })} placeholder="Interna napomena"/></label>
             </div>
           </article>)}
         </div>

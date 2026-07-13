@@ -3,9 +3,14 @@
   "short_name": "Verano",
   "start_url": "/",
   "display": "standalone",
-  "background_color": "#f4f9ff",
-  "theme_color": "#2f80ed",
+  "background_color": "#f8fcff",
+  "theme_color": "#eaf6ff",
   "icons": [
-    { "src": "/logo.png", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }
+    {
+      "src": "/logo.png",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
   ]
 }
