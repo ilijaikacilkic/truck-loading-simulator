@@ -406,6 +406,13 @@ function normalizeDailyQuantity(value) {
   return String(value ?? '').trim().replace('.', ',');
 }
 
+export function inferDailyUnitOfMeasure(description) {
+  const text = String(description || '').toLowerCase();
+  if (text.includes('zijkap')) return 'SET';
+  if (['bovenkap', 'onderkap', 'zijgeleider', 'lamel'].some(keyword => text.includes(keyword))) return 'M1';
+  return 'STUK';
+}
+
 export function makeDailyRefillRows(rows) {
   const postingDate = todayNavisionDate();
   const locationCode = 'VERANO-RS';
@@ -418,7 +425,7 @@ export function makeDailyRefillRows(rows) {
       row.description || '',
       locationCode,
       normalizeDailyQuantity(row.transferQty),
-      '',
+      inferDailyUnitOfMeasure(row.description),
       normalizeWarehouseLocation(row.bulkLocation) || '',
       normalizeWarehouseLocation(row.pickLocation) || '',
       row.note || ''

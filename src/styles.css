@@ -620,6 +620,8 @@ input{text-transform:none}input[placeholder="Bulk"],input[placeholder="Pick"],in
 .box-group-meta{display:flex;justify-content:space-between;gap:10px;margin-top:6px;color:#475569;font-size:13px;font-weight:800;flex-wrap:wrap}
 .box-group-meta span:last-child{color:#0f3a66}
 @media (max-width:768px){
+  .splash-logo-wrap{width:min(88vw,320px);padding:18px 20px}
+  .splash-tagline{font-size:26px}
   .scan-feed{left:14px;right:14px;top:auto;bottom:14px;max-width:none}
   .scan-feed-item strong{font-size:15px}
   .scanner-summary-panel{padding:12px;border-radius:16px}
@@ -940,6 +942,34 @@ input{text-transform:none}input[placeholder="Bulk"],input[placeholder="Pick"],in
 @keyframes veranoSplashPulse{
   0%,100%{opacity:.86;transform:scale(1)}
   50%{opacity:1;transform:scale(1.025)}
+}
+@keyframes veranoSplashExit{
+  to{opacity:0;visibility:hidden;pointer-events:none}
+}
+
+/* v16.2 full-screen image splash */
+.splash-screen.verano-splash{
+  position:fixed!important;
+  inset:0!important;
+  z-index:9999!important;
+  display:block!important;
+  width:100vw!important;
+  height:100vh!important;
+  padding:0!important;
+  overflow:hidden!important;
+  background:#f8fcff!important;
+  animation:veranoSplashExit .45s ease 1.55s forwards!important;
+}
+.verano-splash-image{
+  width:100%!important;
+  height:100%!important;
+  object-fit:cover!important;
+  display:block!important;
+  animation:veranoSplashImagePulse 1.8s ease-in-out infinite!important;
+}
+@keyframes veranoSplashImagePulse{
+  0%,100%{opacity:.94;transform:scale(1)}
+  50%{opacity:1;transform:scale(1.012)}
 }
 @keyframes veranoSplashExit{
   to{opacity:0;visibility:hidden;pointer-events:none}
