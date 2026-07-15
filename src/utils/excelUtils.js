@@ -520,6 +520,14 @@ export function makeProductionWriteoffRows(rows) {
   ];
 }
 
+
+export function formatProductionWriteoffRowsForEmail(rows) {
+  const sheetRows = makeProductionWriteoffRows(rows);
+  return sheetRows
+    .map(row => row.map(value => String(value ?? '')).join('\t'))
+    .join('\n');
+}
+
 export function makeProductionWriteoffFilename() {
   return `otpis-skarta-${todayIsoDate()}.xlsx`;
 }

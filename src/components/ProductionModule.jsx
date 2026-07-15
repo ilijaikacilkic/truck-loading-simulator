@@ -1,6 +1,6 @@
 import React, { useMemo, useState } from 'react';
-import { ArrowLeft, Download, Plus, Search, Trash2 } from 'lucide-react';
-import { downloadProductionWriteoffXlsx } from '../utils/excelUtils.js';
+import { ArrowLeft, Download, Mail, Plus, Search } from 'lucide-react';
+import { downloadProductionWriteoffXlsx, formatProductionWriteoffRowsForEmail, makeProductionWriteoffFilename, todaySrDate } from '../utils/excelUtils.js';
 import { findProductionInventoryEntry, normalizeProductionLocation, searchProductionInventory, uppercaseProductionLocation } from '../utils/productionInventory.js';
 
 function parseQuantity(value) {
@@ -65,7 +65,7 @@ export default function ProductionModule({ ctx }) {
       return;
     }
     if (!article) {
-      alert('Lokacija nije pronađena u inventaru. Možeš uneti lokaciju ili ART, npr. BA01, LAMEL BOX 03, RS 30 AB 01 ili ART-035929.');
+      alert('Lokacija nije pronađena u inventaru. Proveri unos ili izaberi lokaciju iz predloga.');
       return;
     }
     if (!qty || qty <= 0) {
@@ -111,11 +111,6 @@ export default function ProductionModule({ ctx }) {
     commitItems(items.filter(item => item.id !== id));
   }
 
-  function clearItems() {
-    if (!items.length) return;
-    if (!confirm('Obrisati sve stavke za otpis?')) return;
-    commitItems([]);
-  }
 
   function chooseLocation(location) {
     setPickLocation(location);
@@ -128,6 +123,24 @@ export default function ProductionModule({ ctx }) {
       return;
     }
     downloadProductionWriteoffXlsx(items);
+  }
+
+  function emailWriteoff() {
+    if (!items.length) {
+      alert('Nema dodatih stavki za otpis.');
+      return;
+    }
+    const subject = encodeURIComponent(`Otpis skarta - ${todaySrDate()}`);
+    const body = encodeURIComponent(`Zdravo,
+
+U prilogu treba dodati Excel fajl: ${makeProductionWriteoffFilename()}
+
+Pregled otpisa:
+
+${formatProductionWriteoffRowsForEmail(items)}
+
+Pozdrav`);
+    window.location.href = `mailto:?subject=${subject}&body=${body}`;
   }
 
   return <>
@@ -165,7 +178,6 @@ export default function ProductionModule({ ctx }) {
                 setPickLocation(normalized);
                 setSearch(normalized);
               }}
-              placeholder="npr. BA01, LAMEL BOX 03 ili ART-035929"
               autoCapitalize="characters"
             />
           </label>
@@ -174,20 +186,12 @@ export default function ProductionModule({ ctx }) {
             <input
               value={quantity}
               onChange={event => setQuantity(event.target.value)}
-              placeholder="npr. 6 ili 12,5"
               inputMode="decimal"
             />
           </label>
           <button type="submit" className="primary writeoff-add-btn"><Plus size={18}/> Dodaj</button>
         </form>
 
-        <div className="writeoff-article-preview">
-          {selectedArticle ? (
-            <span>Pronađeno: <b>{selectedArticle.art}</b> · {selectedArticle.location}</span>
-          ) : (
-            <span>Upiši lokaciju ili ART da aplikacija pronađe povezani podatak iz inventara.</span>
-          )}
-        </div>
 
         {(filteredLocations.length > 0 && !selectedArticle) && (
           <div className="writeoff-location-suggestions">
@@ -202,7 +206,7 @@ export default function ProductionModule({ ctx }) {
 
         <div className="writeoff-actions-row">
           <button className="primary" onClick={downloadExcel} disabled={!items.length}><Download size={18}/> Preuzmi Excel</button>
-          <button className="ghost" onClick={clearItems} disabled={!items.length}><Trash2 size={18}/> Obriši sve</button>
+          <button className="primary" onClick={emailWriteoff} disabled={!items.length}><Mail size={18}/> Pošalji mail</button>
         </div>
 
         {items.length ? (

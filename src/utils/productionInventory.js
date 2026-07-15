@@ -1,7 +1,7 @@
-import { normalizeArtNumber, normalizeWarehouseLocation, uppercaseText } from './dataFormat.js';
+import { normalizeWarehouseLocation, uppercaseText } from './dataFormat.js';
 
-// Source: lokacijeZaotpis.xlsx. Columns are normalized to art + location + materialType.
-// materialType is stored for future logic/filtering, but not shown in the otpis UI.
+// Source: lokacijeZaotpis.xlsx. Each row is normalized to art + location + materialType.
+// materialType is stored only for internal logic (for example Unit in export), not shown in the otpis UI.
 export const PRODUCTION_ARTICLE_LOCATIONS = [
   {
     "art": "ART-006887",
@@ -1016,842 +1016,842 @@ export const PRODUCTION_ARTICLE_LOCATIONS = [
   {
     "art": "ART-000648",
     "location": "RS 20 AI 02",
-    "materialType": "onderkap. Bovenkap"
+    "materialType": "onderkap. bovenkap"
   },
   {
     "art": "ART-000693",
     "location": "RS 20 AI 04",
-    "materialType": "onderkap. Bovenkap"
+    "materialType": "onderkap. bovenkap"
   },
   {
     "art": "ART-000654",
     "location": "RS 20 AI 06",
-    "materialType": "onderkap. Bovenkap"
+    "materialType": "onderkap. bovenkap"
   },
   {
     "art": "ART-000699",
     "location": "RS 20 AI 08",
-    "materialType": "onderkap. Bovenkap"
+    "materialType": "onderkap. bovenkap"
   },
   {
     "art": "ART-000655",
     "location": "RS 20 AI 10",
-    "materialType": "onderkap. Bovenkap"
+    "materialType": "onderkap. bovenkap"
   },
   {
     "art": "ART-000700",
     "location": "RS 20 AI 12",
-    "materialType": "onderkap. Bovenkap"
+    "materialType": "onderkap. bovenkap"
   },
   {
     "art": "ART-000656",
     "location": "RS 20 AI 14",
-    "materialType": "onderkap. Bovenkap"
+    "materialType": "onderkap. bovenkap"
   },
   {
     "art": "ART-000701",
     "location": "RS 20 AI 16",
-    "materialType": "onderkap. Bovenkap"
+    "materialType": "onderkap. bovenkap"
   },
   {
     "art": "ART-000679",
     "location": "RS 20 AI 18",
-    "materialType": "onderkap. Bovenkap"
+    "materialType": "onderkap. bovenkap"
   },
   {
     "art": "ART-000724",
     "location": "RS 20 AI 20",
-    "materialType": "onderkap. Bovenkap"
+    "materialType": "onderkap. bovenkap"
   },
   {
     "art": "ART-000665",
     "location": "RS 20 AJ 01",
-    "materialType": "onderkap. Bovenkap"
+    "materialType": "onderkap. bovenkap"
   },
   {
     "art": "ART-000687",
     "location": "RS 20 AJ 02",
-    "materialType": "onderkap. Bovenkap"
+    "materialType": "onderkap. bovenkap"
   },
   {
     "art": "ART-000710",
     "location": "RS 20 AJ 03",
-    "materialType": "onderkap. Bovenkap"
+    "materialType": "onderkap. bovenkap"
   },
   {
     "art": "ART-000732",
     "location": "RS 20 AJ 04",
-    "materialType": "onderkap. Bovenkap"
+    "materialType": "onderkap. bovenkap"
   },
   {
     "art": "ART-000667",
     "location": "RS 20 AJ 05",
-    "materialType": "onderkap. Bovenkap"
+    "materialType": "onderkap. bovenkap"
   },
   {
     "art": "ART-001103",
     "location": "RS 20 AJ 06",
-    "materialType": "onderkap. Bovenkap"
+    "materialType": "onderkap. bovenkap"
   },
   {
     "art": "ART-000712",
     "location": "RS 20 AJ 07",
-    "materialType": "onderkap. Bovenkap"
+    "materialType": "onderkap. bovenkap"
   },
   {
     "art": "ART-001139",
     "location": "RS 20 AJ 08",
-    "materialType": "onderkap. Bovenkap"
+    "materialType": "onderkap. bovenkap"
   },
   {
     "art": "ART-000676",
     "location": "RS 20 AJ 09",
-    "materialType": "onderkap. Bovenkap"
+    "materialType": "onderkap. bovenkap"
   },
   {
     "art": "ART-000721",
     "location": "RS 20 AJ 11",
-    "materialType": "onderkap. Bovenkap"
+    "materialType": "onderkap. bovenkap"
   },
   {
     "art": "ART-000678",
     "location": "RS 20 AJ 13",
-    "materialType": "onderkap. Bovenkap"
+    "materialType": "onderkap. bovenkap"
   },
   {
     "art": "ART-001096",
     "location": "RS 20 AJ 14",
-    "materialType": "onderkap. Bovenkap"
+    "materialType": "onderkap. bovenkap"
   },
   {
     "art": "ART-000723",
     "location": "RS 20 AJ 15",
-    "materialType": "onderkap. Bovenkap"
+    "materialType": "onderkap. bovenkap"
   },
   {
     "art": "ART-001132",
     "location": "RS 20 AJ 16",
-    "materialType": "onderkap. Bovenkap"
+    "materialType": "onderkap. bovenkap"
   },
   {
     "art": "ART-000680",
     "location": "RS 20 AJ 17",
-    "materialType": "onderkap. Bovenkap"
+    "materialType": "onderkap. bovenkap"
   },
   {
     "art": "ART-000725",
     "location": "RS 20 AJ 18",
-    "materialType": "onderkap. Bovenkap"
+    "materialType": "onderkap. bovenkap"
   },
   {
     "art": "ART-000684",
     "location": "RS 20 AJ 19",
-    "materialType": "onderkap. Bovenkap"
+    "materialType": "onderkap. bovenkap"
   },
   {
     "art": "ART-000729",
     "location": "RS 20 AJ 20",
-    "materialType": "onderkap. Bovenkap"
+    "materialType": "onderkap. bovenkap"
   },
   {
     "art": "ART-036030",
     "location": "RS 20 AK 02",
-    "materialType": "onderkap. Bovenkap"
+    "materialType": "onderkap. bovenkap"
   },
   {
     "art": "ART-036029",
     "location": "RS 20 AK 04",
-    "materialType": "onderkap. Bovenkap"
+    "materialType": "onderkap. bovenkap"
   },
   {
     "art": "ART-035907",
     "location": "RS 20 AK 05",
-    "materialType": "onderkap. Bovenkap"
+    "materialType": "onderkap. bovenkap"
   },
   {
     "art": "ART-001095",
     "location": "RS 20 AK 06",
-    "materialType": "onderkap. Bovenkap"
+    "materialType": "onderkap. bovenkap"
   },
   {
     "art": "ART-035908",
     "location": "RS 20 AK 07",
-    "materialType": "onderkap. Bovenkap"
+    "materialType": "onderkap. bovenkap"
   },
   {
     "art": "ART-001131",
     "location": "RS 20 AK 08",
-    "materialType": "onderkap. Bovenkap"
+    "materialType": "onderkap. bovenkap"
   },
   {
     "art": "ART-001094",
     "location": "RS 20 AK 10",
-    "materialType": "onderkap. Bovenkap"
+    "materialType": "onderkap. bovenkap"
   },
   {
     "art": "ART-001130",
     "location": "RS 20 AK 12",
-    "materialType": "onderkap. Bovenkap"
+    "materialType": "onderkap. bovenkap"
   },
   {
     "art": "ART-001084",
     "location": "RS 20 AK 14",
-    "materialType": "onderkap. Bovenkap"
+    "materialType": "onderkap. bovenkap"
   },
   {
     "art": "ART-001120",
     "location": "RS 20 AK 16",
-    "materialType": "onderkap. Bovenkap"
+    "materialType": "onderkap. bovenkap"
   },
   {
     "art": "ART-000668",
     "location": "RS 20 AK 17",
-    "materialType": "onderkap. Bovenkap"
+    "materialType": "onderkap. bovenkap"
   },
   {
     "art": "ART-000713",
     "location": "RS 20 AK 18",
-    "materialType": "onderkap. Bovenkap"
+    "materialType": "onderkap. bovenkap"
   },
   {
     "art": "ART-000669",
     "location": "RS 20 AK 19",
-    "materialType": "onderkap. Bovenkap"
+    "materialType": "onderkap. bovenkap"
   },
   {
     "art": "ART-000714",
     "location": "RS 20 AK 20",
-    "materialType": "onderkap. Bovenkap"
+    "materialType": "onderkap. bovenkap"
   },
   {
     "art": "ART-001102",
     "location": "RS 20 AL 01",
-    "materialType": "onderkap. Bovenkap"
+    "materialType": "onderkap. bovenkap"
   },
   {
     "art": "ART-001181",
     "location": "RS 20 AL 02",
-    "materialType": "onderkap. Bovenkap"
+    "materialType": "onderkap. bovenkap"
   },
   {
     "art": "ART-001138",
     "location": "RS 20 AL 03",
-    "materialType": "onderkap. Bovenkap"
+    "materialType": "onderkap. bovenkap"
   },
   {
     "art": "ART-001193",
     "location": "RS 20 AL 04",
-    "materialType": "onderkap. Bovenkap"
+    "materialType": "onderkap. bovenkap"
   },
   {
     "art": "ART-001087",
     "location": "RS 20 AL 05",
-    "materialType": "onderkap. Bovenkap"
+    "materialType": "onderkap. bovenkap"
   },
   {
     "art": "ART-001086",
     "location": "RS 20 AL 06",
-    "materialType": "onderkap. Bovenkap"
+    "materialType": "onderkap. bovenkap"
   },
   {
     "art": "ART-001123",
     "location": "RS 20 AL 07",
-    "materialType": "onderkap. Bovenkap"
+    "materialType": "onderkap. bovenkap"
   },
   {
     "art": "ART-001122",
     "location": "RS 20 AL 08",
-    "materialType": "onderkap. Bovenkap"
+    "materialType": "onderkap. bovenkap"
   },
   {
     "art": "ART-035905",
     "location": "RS 20 AL 09",
-    "materialType": "onderkap. Bovenkap"
+    "materialType": "onderkap. bovenkap"
   },
   {
     "art": "ART-001184",
     "location": "RS 20 AL 10",
-    "materialType": "onderkap. Bovenkap"
+    "materialType": "onderkap. bovenkap"
   },
   {
     "art": "ART-035906",
     "location": "RS 20 AL 11",
-    "materialType": "onderkap. Bovenkap"
+    "materialType": "onderkap. bovenkap"
   },
   {
     "art": "ART-001197",
     "location": "RS 20 AL 12",
-    "materialType": "onderkap. Bovenkap"
+    "materialType": "onderkap. bovenkap"
   },
   {
     "art": "ART-001085",
     "location": "RS 20 AL 13",
-    "materialType": "onderkap. Bovenkap"
+    "materialType": "onderkap. bovenkap"
   },
   {
     "art": "ART-001183",
     "location": "RS 20 AL 14",
-    "materialType": "onderkap. Bovenkap"
+    "materialType": "onderkap. bovenkap"
   },
   {
     "art": "ART-001121",
     "location": "RS 20 AL 15",
-    "materialType": "onderkap. Bovenkap"
+    "materialType": "onderkap. bovenkap"
   },
   {
     "art": "ART-001195",
     "location": "RS 20 AL 16",
-    "materialType": "onderkap. Bovenkap"
+    "materialType": "onderkap. bovenkap"
   },
   {
     "art": "ART-000673",
     "location": "RS 20 AL 17",
-    "materialType": "onderkap. Bovenkap"
+    "materialType": "onderkap. bovenkap"
   },
   {
     "art": "ART-000718",
     "location": "RS 20 AL 18",
-    "materialType": "onderkap. Bovenkap"
+    "materialType": "onderkap. bovenkap"
   },
   {
     "art": "ART-000657",
     "location": "RS 20 AL 19",
-    "materialType": "onderkap. Bovenkap"
+    "materialType": "onderkap. bovenkap"
   },
   {
     "art": "ART-000702",
     "location": "RS 20 AL 20",
-    "materialType": "onderkap. Bovenkap"
+    "materialType": "onderkap. bovenkap"
   },
   {
     "art": "ART-001104",
     "location": "RS 20 AM 01",
-    "materialType": "onderkap. Bovenkap"
+    "materialType": "onderkap. bovenkap"
   },
   {
     "art": "ART-001189",
     "location": "RS 20 AM 02",
-    "materialType": "onderkap. Bovenkap"
+    "materialType": "onderkap. bovenkap"
   },
   {
     "art": "ART-001140",
     "location": "RS 20 AM 03",
-    "materialType": "onderkap. Bovenkap"
+    "materialType": "onderkap. bovenkap"
   },
   {
     "art": "ART-001203",
     "location": "RS 20 AM 04",
-    "materialType": "onderkap. Bovenkap"
+    "materialType": "onderkap. bovenkap"
   },
   {
     "art": "ART-001186",
     "location": "RS 20 AM 05",
-    "materialType": "onderkap. Bovenkap"
+    "materialType": "onderkap. bovenkap"
   },
   {
     "art": "ART-001190",
     "location": "RS 20 AM 06",
-    "materialType": "onderkap. Bovenkap"
+    "materialType": "onderkap. bovenkap"
   },
   {
     "art": "ART-001199",
     "location": "RS 20 AM 07",
-    "materialType": "onderkap. Bovenkap"
+    "materialType": "onderkap. bovenkap"
   },
   {
     "art": "ART-001204",
     "location": "RS 20 AM 08",
-    "materialType": "onderkap. Bovenkap"
+    "materialType": "onderkap. bovenkap"
   },
   {
     "art": "ART-001187",
     "location": "RS 20 AM 09",
-    "materialType": "onderkap. Bovenkap"
+    "materialType": "onderkap. bovenkap"
   },
   {
     "art": "ART-001078",
     "location": "RS 20 AM 10",
-    "materialType": "onderkap. Bovenkap"
+    "materialType": "onderkap. bovenkap"
   },
   {
     "art": "ART-001201",
     "location": "RS 20 AM 11",
-    "materialType": "onderkap. Bovenkap"
+    "materialType": "onderkap. bovenkap"
   },
   {
     "art": "ART-001114",
     "location": "RS 20 AM 12",
-    "materialType": "onderkap. Bovenkap"
+    "materialType": "onderkap. bovenkap"
   },
   {
     "art": "ART-001076",
     "location": "RS 20 AM 13",
-    "materialType": "onderkap. Bovenkap"
+    "materialType": "onderkap. bovenkap"
   },
   {
     "art": "ART-001192",
     "location": "RS 20 AM 14",
-    "materialType": "onderkap. Bovenkap"
+    "materialType": "onderkap. bovenkap"
   },
   {
     "art": "ART-001112",
     "location": "RS 20 AM 15",
-    "materialType": "onderkap. Bovenkap"
+    "materialType": "onderkap. bovenkap"
   },
   {
     "art": "ART-001206",
     "location": "RS 20 AM 16",
-    "materialType": "onderkap. Bovenkap"
+    "materialType": "onderkap. bovenkap"
   },
   {
     "art": "ART-000658",
     "location": "RS 20 AM 17",
-    "materialType": "onderkap. Bovenkap"
+    "materialType": "onderkap. bovenkap"
   },
   {
     "art": "ART-000703",
     "location": "RS 20 AM 18",
-    "materialType": "onderkap. Bovenkap"
+    "materialType": "onderkap. bovenkap"
   },
   {
     "art": "ART-000662",
     "location": "RS 20 AM 19",
-    "materialType": "onderkap. Bovenkap"
+    "materialType": "onderkap. bovenkap"
   },
   {
     "art": "ART-000707",
     "location": "RS 20 AM 20",
-    "materialType": "onderkap. Bovenkap"
+    "materialType": "onderkap. bovenkap"
   },
   {
     "art": "ART-035830",
     "location": "RS 20 AN 01",
-    "materialType": "onderkap. Bovenkap"
+    "materialType": "onderkap. bovenkap"
   },
   {
     "art": "ART-036025",
     "location": "RS 20 AN 02",
-    "materialType": "onderkap. Bovenkap"
+    "materialType": "onderkap. bovenkap"
   },
   {
     "art": "ART-035832",
     "location": "RS 20 AN 03",
-    "materialType": "onderkap. Bovenkap"
+    "materialType": "onderkap. bovenkap"
   },
   {
     "art": "ART-036026",
     "location": "RS 20 AN 04",
-    "materialType": "onderkap. Bovenkap"
+    "materialType": "onderkap. bovenkap"
   },
   {
     "art": "ART-035859",
     "location": "RS 20 AN 05",
-    "materialType": "onderkap. Bovenkap"
+    "materialType": "onderkap. bovenkap"
   },
   {
     "art": "ART-035834",
     "location": "RS 20 AN 06",
-    "materialType": "onderkap. Bovenkap"
+    "materialType": "onderkap. bovenkap"
   },
   {
     "art": "ART-035862",
     "location": "RS 20 AN 07",
-    "materialType": "onderkap. Bovenkap"
+    "materialType": "onderkap. bovenkap"
   },
   {
     "art": "ART-035836",
     "location": "RS 20 AN 08",
-    "materialType": "onderkap. Bovenkap"
+    "materialType": "onderkap. bovenkap"
   },
   {
     "art": "ART-035903",
     "location": "RS 20 AN 09",
-    "materialType": "onderkap. Bovenkap"
+    "materialType": "onderkap. bovenkap"
   },
   {
     "art": "ART-035865",
     "location": "RS 20 AN 10",
-    "materialType": "onderkap. Bovenkap"
+    "materialType": "onderkap. bovenkap"
   },
   {
     "art": "ART-035904",
     "location": "RS 20 AN 11",
-    "materialType": "onderkap. Bovenkap"
+    "materialType": "onderkap. bovenkap"
   },
   {
     "art": "ART-035868",
     "location": "RS 20 AN 12",
-    "materialType": "onderkap. Bovenkap"
+    "materialType": "onderkap. bovenkap"
   },
   {
     "art": "ART-035974",
     "location": "RS 20 AN 13",
-    "materialType": "onderkap. Bovenkap"
+    "materialType": "onderkap. bovenkap"
   },
   {
     "art": "ART-001093",
     "location": "RS 20 AN 14",
-    "materialType": "onderkap. Bovenkap"
+    "materialType": "onderkap. bovenkap"
   },
   {
     "art": "ART-035979",
     "location": "RS 20 AN 15",
-    "materialType": "onderkap. Bovenkap"
+    "materialType": "onderkap. bovenkap"
   },
   {
     "art": "ART-001129",
     "location": "RS 20 AN 16",
-    "materialType": "onderkap. Bovenkap"
+    "materialType": "onderkap. bovenkap"
   },
   {
     "art": "ART-035831",
     "location": "RS 20 AN 17",
-    "materialType": "onderkap. Bovenkap"
+    "materialType": "onderkap. bovenkap"
   },
   {
     "art": "ART-035833",
     "location": "RS 20 AN 18",
-    "materialType": "onderkap. Bovenkap"
+    "materialType": "onderkap. bovenkap"
   },
   {
     "art": "ART-035914",
     "location": "RS 20 AN 19",
-    "materialType": "onderkap. Bovenkap"
+    "materialType": "onderkap. bovenkap"
   },
   {
     "art": "ART-035915",
     "location": "RS 20 AN 20",
-    "materialType": "onderkap. Bovenkap"
+    "materialType": "onderkap. bovenkap"
   },
   {
     "art": "ART-035984",
     "location": "RS 20 AO 01",
-    "materialType": "onderkap. Bovenkap"
+    "materialType": "onderkap. bovenkap"
   },
   {
     "art": "ART-035989",
     "location": "RS 20 AO 03",
-    "materialType": "onderkap. Bovenkap"
+    "materialType": "onderkap. bovenkap"
   },
   {
     "art": "ART-036027",
     "location": "RS 20 AO 05",
-    "materialType": "onderkap. Bovenkap"
+    "materialType": "onderkap. bovenkap"
   },
   {
     "art": "ART-035994",
     "location": "RS 20 AO 06",
-    "materialType": "onderkap. Bovenkap"
+    "materialType": "onderkap. bovenkap"
   },
   {
     "art": "ART-036028",
     "location": "RS 20 AO 07",
-    "materialType": "onderkap. Bovenkap"
+    "materialType": "onderkap. bovenkap"
   },
   {
     "art": "ART-035999",
     "location": "RS 20 AO 08",
-    "materialType": "onderkap. Bovenkap"
+    "materialType": "onderkap. bovenkap"
   },
   {
     "art": "ART-035838",
     "location": "RS 20 AO 09",
-    "materialType": "onderkap. Bovenkap"
+    "materialType": "onderkap. bovenkap"
   },
   {
     "art": "ART-035840",
     "location": "RS 20 AO 11",
-    "materialType": "onderkap. Bovenkap"
+    "materialType": "onderkap. bovenkap"
   },
   {
     "art": "ART-035871",
     "location": "RS 20 AO 13",
-    "materialType": "onderkap. Bovenkap"
+    "materialType": "onderkap. bovenkap"
   },
   {
     "art": "ART-035842",
     "location": "RS 20 AO 14",
-    "materialType": "onderkap. Bovenkap"
+    "materialType": "onderkap. bovenkap"
   },
   {
     "art": "ART-035874",
     "location": "RS 20 AO 15",
-    "materialType": "onderkap. Bovenkap"
+    "materialType": "onderkap. bovenkap"
   },
   {
     "art": "ART-035844",
     "location": "RS 20 AO 16",
-    "materialType": "onderkap. Bovenkap"
+    "materialType": "onderkap. bovenkap"
   },
   {
     "art": "ART-035971",
     "location": "RS 20 AO 17",
-    "materialType": "onderkap. Bovenkap"
+    "materialType": "onderkap. bovenkap"
   },
   {
     "art": "ART-035976",
     "location": "RS 20 AO 18",
-    "materialType": "onderkap. Bovenkap"
+    "materialType": "onderkap. bovenkap"
   },
   {
     "art": "ART-035835",
     "location": "RS 20 AO 19",
-    "materialType": "onderkap. Bovenkap"
+    "materialType": "onderkap. bovenkap"
   },
   {
     "art": "ART-035837",
     "location": "RS 20 AO 20",
-    "materialType": "onderkap. Bovenkap"
+    "materialType": "onderkap. bovenkap"
   },
   {
     "art": "ART-035877",
     "location": "RS 20 AP 01",
-    "materialType": "onderkap. Bovenkap"
+    "materialType": "onderkap. bovenkap"
   },
   {
     "art": "ART-035846",
     "location": "RS 20 AP 02",
-    "materialType": "onderkap. Bovenkap"
+    "materialType": "onderkap. bovenkap"
   },
   {
     "art": "ART-035880",
     "location": "RS 20 AP 03",
-    "materialType": "onderkap. Bovenkap"
+    "materialType": "onderkap. bovenkap"
   },
   {
     "art": "ART-035848",
     "location": "RS 20 AP 04",
-    "materialType": "onderkap. Bovenkap"
+    "materialType": "onderkap. bovenkap"
   },
   {
     "art": "ART-035909",
     "location": "RS 20 AP 05",
-    "materialType": "onderkap. Bovenkap"
+    "materialType": "onderkap. bovenkap"
   },
   {
     "art": "ART-035883",
     "location": "RS 20 AP 06",
-    "materialType": "onderkap. Bovenkap"
+    "materialType": "onderkap. bovenkap"
   },
   {
     "art": "ART-035910",
     "location": "RS 20 AP 07",
-    "materialType": "onderkap. Bovenkap"
+    "materialType": "onderkap. bovenkap"
   },
   {
     "art": "ART-035886",
     "location": "RS 20 AP 08",
-    "materialType": "onderkap. Bovenkap"
+    "materialType": "onderkap. bovenkap"
   },
   {
     "art": "ART-036004",
     "location": "RS 20 AP 09",
-    "materialType": "onderkap. Bovenkap"
+    "materialType": "onderkap. bovenkap"
   },
   {
     "art": "ART-035911",
     "location": "RS 20 AP 10",
-    "materialType": "onderkap. Bovenkap"
+    "materialType": "onderkap. bovenkap"
   },
   {
     "art": "ART-036009",
     "location": "RS 20 AP 11",
-    "materialType": "onderkap. Bovenkap"
+    "materialType": "onderkap. bovenkap"
   },
   {
     "art": "ART-035912",
     "location": "RS 20 AP 12",
-    "materialType": "onderkap. Bovenkap"
+    "materialType": "onderkap. bovenkap"
   },
   {
     "art": "ART-036031",
     "location": "RS 20 AP 13",
-    "materialType": "onderkap. Bovenkap"
+    "materialType": "onderkap. bovenkap"
   },
   {
     "art": "ART-036014",
     "location": "RS 20 AP 14",
-    "materialType": "onderkap. Bovenkap"
+    "materialType": "onderkap. bovenkap"
   },
   {
     "art": "ART-036032",
     "location": "RS 20 AP 15",
-    "materialType": "onderkap. Bovenkap"
+    "materialType": "onderkap. bovenkap"
   },
   {
     "art": "ART-036019",
     "location": "RS 20 AP 16",
-    "materialType": "onderkap. Bovenkap"
+    "materialType": "onderkap. bovenkap"
   },
   {
     "art": "ART-035916",
     "location": "RS 20 AP 17",
-    "materialType": "onderkap. Bovenkap"
+    "materialType": "onderkap. bovenkap"
   },
   {
     "art": "ART-035917",
     "location": "RS 20 AP 18",
-    "materialType": "onderkap. Bovenkap"
+    "materialType": "onderkap. bovenkap"
   },
   {
     "art": "ART-035981",
     "location": "RS 20 AP 19",
-    "materialType": "onderkap. Bovenkap"
+    "materialType": "onderkap. bovenkap"
   },
   {
     "art": "ART-035986",
     "location": "RS 20 AP 20",
-    "materialType": "onderkap. Bovenkap"
+    "materialType": "onderkap. bovenkap"
   },
   {
     "art": "ART-036033",
     "location": "RS 20 AQ 01",
-    "materialType": "onderkap. Bovenkap"
+    "materialType": "onderkap. bovenkap"
   },
   {
     "art": "ART-036034",
     "location": "RS 20 AQ 03",
-    "materialType": "onderkap. Bovenkap"
+    "materialType": "onderkap. bovenkap"
   },
   {
     "art": "ART-035991",
     "location": "RS 20 AQ 05",
-    "materialType": "onderkap. Bovenkap"
+    "materialType": "onderkap. bovenkap"
   },
   {
     "art": "ART-035996",
     "location": "RS 20 AQ 07",
-    "materialType": "onderkap. Bovenkap"
+    "materialType": "onderkap. bovenkap"
   },
   {
     "art": "ART-035843",
     "location": "RS 20 AQ 09",
-    "materialType": "onderkap. Bovenkap"
+    "materialType": "onderkap. bovenkap"
   },
   {
     "art": "ART-035845",
     "location": "RS 20 AQ 11",
-    "materialType": "onderkap. Bovenkap"
+    "materialType": "onderkap. bovenkap"
   },
   {
     "art": "ART-035920",
     "location": "RS 20 AQ 13",
-    "materialType": "onderkap. Bovenkap"
+    "materialType": "onderkap. bovenkap"
   },
   {
     "art": "ART-035921",
     "location": "RS 20 AQ 15",
-    "materialType": "onderkap. Bovenkap"
+    "materialType": "onderkap. bovenkap"
   },
   {
     "art": "ART-036001",
     "location": "RS 20 AQ 17",
-    "materialType": "onderkap. Bovenkap"
+    "materialType": "onderkap. bovenkap"
   },
   {
     "art": "ART-036006",
     "location": "RS 20 AQ 19",
-    "materialType": "onderkap. Bovenkap"
+    "materialType": "onderkap. bovenkap"
   },
   {
     "art": "ART-035588",
     "location": "RS 20 AR 02",
-    "materialType": "onderkap. Bovenkap"
+    "materialType": "onderkap. bovenkap"
   },
   {
     "art": "ART-035589",
     "location": "RS 20 AR 04",
-    "materialType": "onderkap. Bovenkap"
+    "materialType": "onderkap. bovenkap"
   },
   {
     "art": "ART-035590",
     "location": "RS 20 AR 06",
-    "materialType": "onderkap. Bovenkap"
+    "materialType": "onderkap. bovenkap"
   },
   {
     "art": "ART-035591",
     "location": "RS 20 AR 08",
-    "materialType": "onderkap. Bovenkap"
+    "materialType": "onderkap. bovenkap"
   },
   {
     "art": "ART-035592",
     "location": "RS 20 AR 10",
-    "materialType": "onderkap. Bovenkap"
+    "materialType": "onderkap. bovenkap"
   },
   {
     "art": "ART-035593",
     "location": "RS 20 AR 12",
-    "materialType": "onderkap. Bovenkap"
+    "materialType": "onderkap. bovenkap"
   },
   {
     "art": "ART-035594",
     "location": "RS 20 AR 14",
-    "materialType": "onderkap. Bovenkap"
+    "materialType": "onderkap. bovenkap"
   },
   {
     "art": "ART-035595",
     "location": "RS 20 AR 16",
-    "materialType": "onderkap. Bovenkap"
+    "materialType": "onderkap. bovenkap"
   },
   {
     "art": "ART-035839",
     "location": "RS 20 AR 18",
-    "materialType": "onderkap. Bovenkap"
+    "materialType": "onderkap. bovenkap"
   },
   {
     "art": "ART-035841",
     "location": "RS 20 AR 20",
-    "materialType": "onderkap. Bovenkap"
+    "materialType": "onderkap. bovenkap"
   },
   {
     "art": "ART-035624",
     "location": "RS 20 AS 01",
-    "materialType": "onderkap. Bovenkap"
+    "materialType": "onderkap. bovenkap"
   },
   {
     "art": "ART-035625",
     "location": "RS 20 AS 03",
-    "materialType": "onderkap. Bovenkap"
+    "materialType": "onderkap. bovenkap"
   },
   {
     "art": "ART-035622",
     "location": "RS 20 AS 05",
-    "materialType": "onderkap. Bovenkap"
+    "materialType": "onderkap. bovenkap"
   },
   {
     "art": "ART-035623",
     "location": "RS 20 AS 07",
-    "materialType": "onderkap. Bovenkap"
+    "materialType": "onderkap. bovenkap"
   },
   {
     "art": "ART-035620",
     "location": "RS 20 AS 09",
-    "materialType": "onderkap. Bovenkap"
+    "materialType": "onderkap. bovenkap"
   },
   {
     "art": "ART-035621",
     "location": "RS 20 AS 11",
-    "materialType": "onderkap. Bovenkap"
+    "materialType": "onderkap. bovenkap"
   },
   {
     "art": "ART-035618",
     "location": "RS 20 AS 13",
-    "materialType": "onderkap. Bovenkap"
+    "materialType": "onderkap. bovenkap"
   },
   {
     "art": "ART-035619",
     "location": "RS 20 AS 15",
-    "materialType": "onderkap. Bovenkap"
+    "materialType": "onderkap. bovenkap"
   },
   {
     "art": "ART-035918",
     "location": "RS 20 AS 17",
-    "materialType": "onderkap. Bovenkap"
+    "materialType": "onderkap. bovenkap"
   },
   {
     "art": "ART-035919",
     "location": "RS 20 AS 19",
-    "materialType": "onderkap. Bovenkap"
+    "materialType": "onderkap. bovenkap"
   },
   {
     "art": "ART-001168",
@@ -2614,6 +2614,15 @@ function compactLocation(value) {
   return uppercaseText(value).replace(/[^A-Z0-9]/g, '');
 }
 
+function normalizeProductionArtNumber(value) {
+  const compact = compactLocation(value);
+  const explicit = compact.match(/^ART(\d{6})$/);
+  if (explicit) return `ART-${explicit[1]}`;
+  const digitsOnly = compact.match(/^(\d{6})$/);
+  if (digitsOnly) return `ART-${digitsOnly[1]}`;
+  return '';
+}
+
 function normalizeExplicitRsLocation(raw) {
   const compact = compactLocation(raw);
   const match = compact.match(/^RS(20|30)([A-Z]+)(\d{1,2})$/);
@@ -2638,22 +2647,25 @@ function suffixFromShortLocation(raw) {
 
 function locationBySuffix(raw) {
   const suffix = suffixFromShortLocation(raw);
-  if (!suffix) return '';
+  if (!suffix) return { location: '', ambiguous: false };
   const matches = PRODUCTION_ARTICLE_LOCATIONS.filter(item => item.location.endsWith(` ${suffix}`));
-  if (matches.length === 1) return matches[0].location;
-  const rs20 = matches.find(item => item.location.startsWith('RS 20 '));
-  return rs20?.location || matches[0]?.location || '';
+  if (matches.length === 1) return { location: matches[0].location, ambiguous: false };
+  // If the suffix exists in more than one warehouse/type, do not guess. The user must type RS 20/RS 30 or select a suggestion.
+  if (matches.length > 1) return { location: '', ambiguous: true };
+  return { location: '', ambiguous: false };
 }
 
 export function normalizeProductionLocation(value) {
   const raw = uppercaseText(value).trim().replace(/\s+/g, ' ');
   if (!raw) return '';
-  if (normalizeArtNumber(raw)) return normalizeArtNumber(raw);
-  return normalizeExplicitRsLocation(raw)
-    || normalizeLamelBox(raw)
-    || locationBySuffix(raw)
-    || normalizeWarehouseLocation(raw)
-    || raw;
+  const art = normalizeProductionArtNumber(raw);
+  if (art) return art;
+  const explicit = normalizeExplicitRsLocation(raw) || normalizeLamelBox(raw);
+  if (explicit) return explicit;
+  const suffixMatch = locationBySuffix(raw);
+  if (suffixMatch.location) return suffixMatch.location;
+  if (suffixMatch.ambiguous) return raw;
+  return normalizeWarehouseLocation(raw) || raw;
 }
 
 export function uppercaseProductionLocation(value) {
@@ -2664,12 +2676,13 @@ export function findProductionInventoryEntry(value) {
   const raw = uppercaseText(value).trim();
   if (!raw) return null;
 
-  const normalizedArt = normalizeArtNumber(raw);
+  const normalizedArt = normalizeProductionArtNumber(raw);
   if (normalizedArt) {
     return PRODUCTION_ARTICLE_LOCATIONS.find(item => item.art === normalizedArt) || null;
   }
 
   const normalized = normalizeProductionLocation(raw);
+  if (!normalized || normalizeProductionArtNumber(normalized)) return null;
   const normalizedCompact = compactLocation(normalized);
   return PRODUCTION_ARTICLE_LOCATIONS.find(item => compactLocation(item.location) === normalizedCompact) || null;
 }
@@ -2679,7 +2692,7 @@ export function findArticleByLocation(location) {
 }
 
 export function findLocationsByArticle(art) {
-  const normalizedArt = normalizeArtNumber(art);
+  const normalizedArt = normalizeProductionArtNumber(art);
   if (!normalizedArt) return [];
   return PRODUCTION_ARTICLE_LOCATIONS.filter(item => item.art === normalizedArt);
 }
@@ -2687,7 +2700,7 @@ export function findLocationsByArticle(art) {
 export function searchProductionInventory(query, limit = 8) {
   const raw = uppercaseText(query).trim();
   if (!raw || raw.length < 2) return [];
-  const normalizedArt = normalizeArtNumber(raw);
+  const normalizedArt = normalizeProductionArtNumber(raw);
   const normalizedLocation = normalizeProductionLocation(raw);
   const compactQuery = compactLocation(raw);
   const compactNormalizedLocation = compactLocation(normalizedLocation);
@@ -2695,11 +2708,21 @@ export function searchProductionInventory(query, limit = 8) {
   return PRODUCTION_ARTICLE_LOCATIONS
     .filter(item => {
       const itemLocationCompact = compactLocation(item.location);
-      return item.art.includes(normalizedArt || raw)
+      return (normalizedArt && item.art.includes(normalizedArt))
         || item.art.includes(raw)
         || item.location.includes(normalizedLocation)
         || itemLocationCompact.includes(compactQuery)
         || itemLocationCompact.includes(compactNormalizedLocation);
     })
     .slice(0, limit);
+}
+
+export function getProductionInventoryStats() {
+  return {
+  "tende": 50,
+  "zijkap": 78,
+  "lamele": 74,
+  "onderkap. bovenkap": 168,
+  "zijgeleider": 151
+};
 }
