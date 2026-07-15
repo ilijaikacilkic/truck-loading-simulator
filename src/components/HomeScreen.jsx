@@ -3,7 +3,6 @@ import {
   ArrowLeft,
   BarChart3,
   ClipboardList,
-  Clock3,
   Factory,
   History,
   PackageCheck,
@@ -101,17 +100,13 @@ function ActivityPanel({ ctx }) {
 }
 
 export default function HomeScreen({ ctx }) {
-  const { appView, APP_LOGO_SRC, openModule } = ctx;
+  const { appView, openModule } = ctx;
 
   if (appView === 'home') {
     return <section className="home-screen home-dashboard-screen">
-      <div className="dashboard-topbar">
-        <img className="dashboard-logo" src={APP_LOGO_SRC} alt="Verano" />
-      </div>
-
       <div className="dashboard-welcome-card">
         <div>
-          <h1>Dobro jutro, Ilija</h1>
+          <h1>Ilija</h1>
           <p>Verano Production & Logistics</p>
         </div>
         <div className="dashboard-user-chip"><UserCircle size={36}/><span>Logistika</span></div>
@@ -140,7 +135,6 @@ export default function HomeScreen({ ctx }) {
         <button className="logistics-back-btn" onClick={() => openModule('home')}><ArrowLeft size={18}/> Početna</button>
         <div>
           <h1>Logistika</h1>
-          <p>Operacije, dopune i skeniranje</p>
         </div>
       </div>
 
@@ -149,7 +143,6 @@ export default function HomeScreen({ ctx }) {
         <button className="logistics-module-card" onClick={() => openModule('scan')}><QrCode size={30}/><b>Skeniranje</b><small>CPR i boksovi</small></button>
         <button className="logistics-module-card" onClick={() => openModule('transfer')}><ClipboardList size={30}/><b>Dopuna</b><small>Refil i transfer</small></button>
         <button className="logistics-module-card" onClick={() => openModule('count')}><BarChart3 size={30}/><b>Inventar</b><small>Stanje i brojanje</small></button>
-        <button className="logistics-module-card" onClick={() => openModule('time')}><Clock3 size={30}/><b>Vreme</b><small>Do kraja smene</small></button>
       </div>
 
       <ActivityPanel ctx={ctx} />

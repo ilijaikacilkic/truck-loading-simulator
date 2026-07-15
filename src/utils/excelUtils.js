@@ -493,23 +493,29 @@ function writeoffExportDate() {
   return `${d.getDate()}-${months[d.getMonth()]}`;
 }
 
+function getProductionWriteoffUnit(row) {
+  const type = String(row?.materialType || '').trim().toUpperCase();
+  if (type === 'ZIJKAP' || type === 'ZIJKAPE' || type === 'ZIJ KAP') return '';
+  return 'M1';
+}
+
 export function makeProductionWriteoffRows(rows) {
   const date = writeoffExportDate();
   return [
     ['Name', 'Date', 'Entry type', 'Article number', 'Article description', 'How many', 'Unit', 'Department', 'SOR projects - POR', 'Reason', 'Additional', 'Correction made?'],
     ...rows.map(row => [
-      'Domestic',
+      '',
       date,
       'Negative Adjmt.',
       row.art || '',
-      row.description || '',
-      formatProductionQuantity(row.quantity),
       '',
+      formatProductionQuantity(row.quantity),
+      getProductionWriteoffUnit(row),
       '',
       '',
       'Defect - Scratch or Dent',
       '',
-      'Yes'
+      ''
     ])
   ];
 }

@@ -974,3 +974,31 @@ input{text-transform:none}input[placeholder="Bulk"],input[placeholder="Pick"],in
 @keyframes veranoSplashExit{
   to{opacity:0;visibility:hidden;pointer-events:none}
 }
+
+
+/* v16.4 final dashboard cleanup */
+.dashboard-topbar{display:none!important}
+.home-dashboard-screen{padding-top:18px!important}
+.dashboard-welcome-card{justify-content:center;text-align:center;align-items:center}
+.dashboard-welcome-card>div:first-child{flex:1;text-align:center}
+.dashboard-welcome-card h1{margin:0 0 6px!important}
+.dashboard-user-chip{min-width:82px;justify-content:center}
+.logistics-header-card{text-align:center;align-items:center!important;justify-content:center!important}
+.logistics-header-card>div{width:100%;text-align:center}
+.logistics-header-card p{display:none!important}
+.logistics-module-grid{grid-template-columns:repeat(2,minmax(0,1fr))!important}
+.writeoff-entry-card small{display:none!important}
+.writeoff-entry-card{gap:16px!important}
+
+/* Clean full-screen Verano splash */
+.splash-screen.verano-splash{background:#f4fbff!important;display:grid!important;place-items:center!important;padding:0!important}
+.verano-splash-image{width:100vw!important;height:100vh!important;object-fit:cover!important;border-radius:0!important;box-shadow:none!important;animation:veranoSplashPulse 1.9s ease-in-out infinite!important}
+@keyframes veranoSplashPulse{0%,100%{opacity:.94;transform:scale(1)}50%{opacity:1;transform:scale(1.015)}}
+
+@media(max-width:768px){
+  .home-dashboard-screen{padding-top:14px!important}
+  .dashboard-welcome-card{display:flex!important;flex-direction:row!important;text-align:center!important;align-items:center!important}
+  .dashboard-user-chip span{display:none!important}
+  .logistics-header-card{text-align:center!important}
+  .logistics-module-grid{grid-template-columns:1fr 1fr!important}
+}

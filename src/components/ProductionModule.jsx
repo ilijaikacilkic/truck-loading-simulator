@@ -138,7 +138,6 @@ export default function ProductionModule({ ctx }) {
         <button className="production-action-card writeoff-entry-card" onClick={() => setScreen('writeoff')}>
           <span className="writeoff-red-x">✕</span>
           <b>Otpis</b>
-          <small>Lokacija + količina za otpis</small>
         </button>
       </section>
     ) : (
