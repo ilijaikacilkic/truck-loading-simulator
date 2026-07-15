@@ -1,7 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import { ArrowLeft, Download, Plus, Search, Trash2 } from 'lucide-react';
 import { downloadProductionWriteoffXlsx } from '../utils/excelUtils.js';
-import { PRODUCTION_ARTICLE_LOCATIONS, findArticleByLocation, normalizeProductionLocation, uppercaseProductionLocation } from '../utils/productionInventory.js';
+import { findProductionInventoryEntry, normalizeProductionLocation, searchProductionInventory, uppercaseProductionLocation } from '../utils/productionInventory.js';
 
 function parseQuantity(value) {
   const normalized = String(value || '')
@@ -36,18 +36,15 @@ export default function ProductionModule({ ctx }) {
   const [search, setSearch] = useState('');
   const items = productionWriteoffs;
 
-  const selectedArticle = useMemo(() => findArticleByLocation(pickLocation), [pickLocation]);
+  const selectedArticle = useMemo(() => findProductionInventoryEntry(pickLocation), [pickLocation]);
   const totalMeters = useMemo(
     () => items.reduce((sum, item) => sum + Number(item.quantity || 0), 0),
     [items]
   );
 
   const filteredLocations = useMemo(() => {
-    const query = normalizeProductionLocation(search || pickLocation);
-    if (!query || query.length < 2) return [];
-    return PRODUCTION_ARTICLE_LOCATIONS
-      .filter(item => item.location.includes(query) || item.art.includes(query))
-      .slice(0, 8);
+    const query = search || pickLocation;
+    return searchProductionInventory(query, 8);
   }, [search, pickLocation]);
 
   if (appView !== 'production') return null;
@@ -59,7 +56,7 @@ export default function ProductionModule({ ctx }) {
   function addWriteoffItem(event) {
     event?.preventDefault?.();
     const pick = normalizeProductionLocation(pickLocation);
-    const article = findArticleByLocation(pick);
+    const article = findProductionInventoryEntry(pickLocation);
     const qty = parseQuantity(quantity);
     const now = new Date().toISOString();
 
@@ -68,7 +65,7 @@ export default function ProductionModule({ ctx }) {
       return;
     }
     if (!article) {
-      alert('Lokacija nije pronađena u inventaru. Možeš uneti npr. AL12, AP20 ili RS 20 AL 12.');
+      alert('Lokacija nije pronađena u inventaru. Možeš uneti lokaciju ili ART, npr. BA01, LAMEL BOX 03, RS 30 AB 01 ili ART-035929.');
       return;
     }
     if (!qty || qty <= 0) {
@@ -77,13 +74,14 @@ export default function ProductionModule({ ctx }) {
     }
 
     const nextItems = (() => {
-      const existingIndex = items.findIndex(item => normalizeProductionLocation(item.pickLocation) === pick);
+      const existingIndex = items.findIndex(item => normalizeProductionLocation(item.pickLocation) === article.location);
       if (existingIndex >= 0) {
         return items.map((item, index) => index === existingIndex
           ? {
               ...item,
               art: article.art,
               pickLocation: article.location,
+              materialType: article.materialType || '',
               quantity: Number(item.quantity || 0) + qty,
               updatedAt: now,
               additions: [...(item.additions || []), { quantity: qty, createdAt: now }]
@@ -95,6 +93,7 @@ export default function ProductionModule({ ctx }) {
         id: crypto?.randomUUID?.() || `${Date.now()}-${Math.random()}`,
         art: article.art,
         pickLocation: article.location,
+        materialType: article.materialType || '',
         quantity: qty,
         createdAt: now,
         updatedAt: now,
@@ -162,11 +161,12 @@ export default function ProductionModule({ ctx }) {
                 setSearch(value);
               }}
               onBlur={() => {
-                const normalized = normalizeProductionLocation(pickLocation);
+                const entry = findProductionInventoryEntry(pickLocation);
+                const normalized = entry?.location || normalizeProductionLocation(pickLocation);
                 setPickLocation(normalized);
                 setSearch(normalized);
               }}
-              placeholder="npr. AL12 ili AP20"
+              placeholder="npr. BA01, LAMEL BOX 03 ili ART-035929"
               autoCapitalize="characters"
             />
           </label>
@@ -186,7 +186,7 @@ export default function ProductionModule({ ctx }) {
           {selectedArticle ? (
             <span>Pronađeno: <b>{selectedArticle.art}</b> · {selectedArticle.location}</span>
           ) : (
-            <span>Upiši lokaciju da aplikacija pronađe ART iz inventara.</span>
+            <span>Upiši lokaciju ili ART da aplikacija pronađe povezani podatak iz inventara.</span>
           )}
         </div>
 
