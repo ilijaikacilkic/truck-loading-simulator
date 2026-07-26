@@ -2614,6 +2614,43 @@ function compactLocation(value) {
   return uppercaseText(value).replace(/[^A-Z0-9]/g, '');
 }
 
+function compactMaterialType(value) {
+  return uppercaseText(value).replace(/[^A-Z0-9]/g, '');
+}
+
+export const PRODUCTION_MATERIAL_OPTIONS = [
+  { id: 'tende', label: 'Tende', description: 'Tende / platna' },
+  { id: 'lamele', label: 'Lamele', description: 'Lamel box lokacije' },
+  { id: 'zijkap', label: 'Zijkap', description: 'Zijkap L/R' },
+  { id: 'zijgeleider', label: 'Zijgeleider', description: 'Zigelajderi / vođice' },
+  { id: 'onderkap. bovenkap', label: 'Onderkap / Bovenkap', description: 'Gornje i donje kape' }
+];
+
+function normalizeMaterialFilter(value) {
+  const compact = compactMaterialType(value);
+  if (!compact) return '';
+  if (['TND', 'TENDE', 'TENDA'].includes(compact)) return 'tende';
+  if (['LAMEL', 'LAMELE', 'LAMELLEN'].includes(compact)) return 'lamele';
+  if (['ZIJKAP', 'ZIKAP', 'ZIJKAPI'].includes(compact)) return 'zijkap';
+  if (['ZIJGELEIDER', 'ZIGELAJDER', 'ZIGEL', 'ZIEGEL', 'ZIGELADER'].includes(compact)) return 'zijgeleider';
+  if (['ONDERKAPBOVENKAP', 'ONDERKAP', 'BOVENKAP', 'ONDERBOVEN'].includes(compact)) return 'onderkap. bovenkap';
+  const exact = PRODUCTION_MATERIAL_OPTIONS.find(option => compactMaterialType(option.id) === compact);
+  return exact?.id || value;
+}
+
+function materialMatches(item, materialFilter) {
+  const filter = normalizeMaterialFilter(materialFilter);
+  if (!filter) return true;
+  return compactMaterialType(item.materialType) === compactMaterialType(filter);
+}
+
+export function getProductionMaterialOptions() {
+  return PRODUCTION_MATERIAL_OPTIONS.map(option => ({
+    ...option,
+    count: PRODUCTION_ARTICLE_LOCATIONS.filter(item => materialMatches(item, option.id)).length
+  }));
+}
+
 function normalizeProductionArtNumber(value) {
   const compact = compactLocation(value);
   const explicit = compact.match(/^ART(\d{6})$/);
@@ -2640,31 +2677,32 @@ function normalizeLamelBox(raw) {
 
 function suffixFromShortLocation(raw) {
   const compact = compactLocation(raw);
-  const match = compact.match(/^([A-Z]{2,4})(\d{1,2})$/);
+  const match = compact.match(/^([A-Z]{1,4})(\d{1,2})$/);
   if (!match) return '';
   return `${match[1]} ${match[2].padStart(2, '0')}`;
 }
 
-function locationBySuffix(raw) {
+function locationBySuffix(raw, materialFilter = '') {
   const suffix = suffixFromShortLocation(raw);
-  if (!suffix) return { location: '', ambiguous: false };
-  const matches = PRODUCTION_ARTICLE_LOCATIONS.filter(item => item.location.endsWith(` ${suffix}`));
-  if (matches.length === 1) return { location: matches[0].location, ambiguous: false };
-  // If the suffix exists in more than one warehouse/type, do not guess. The user must type RS 20/RS 30 or select a suggestion.
-  if (matches.length > 1) return { location: '', ambiguous: true };
-  return { location: '', ambiguous: false };
+  if (!suffix) return { location: '', ambiguous: false, matches: [] };
+  const matches = PRODUCTION_ARTICLE_LOCATIONS.filter(item => materialMatches(item, materialFilter) && item.location.endsWith(` ${suffix}`));
+  if (matches.length === 1) return { location: matches[0].location, ambiguous: false, matches };
+  // If the suffix exists in more than one location, do not guess. The user can select from suggestions.
+  if (matches.length > 1) return { location: '', ambiguous: true, matches };
+  return { location: '', ambiguous: false, matches: [] };
 }
 
-export function normalizeProductionLocation(value) {
+export function normalizeProductionLocation(value, materialFilter = '') {
   const raw = uppercaseText(value).trim().replace(/\s+/g, ' ');
   if (!raw) return '';
   const art = normalizeProductionArtNumber(raw);
   if (art) return art;
   const explicit = normalizeExplicitRsLocation(raw) || normalizeLamelBox(raw);
   if (explicit) return explicit;
-  const suffixMatch = locationBySuffix(raw);
+  const suffixMatch = locationBySuffix(raw, materialFilter);
   if (suffixMatch.location) return suffixMatch.location;
   if (suffixMatch.ambiguous) return raw;
+  if (materialFilter) return raw;
   return normalizeWarehouseLocation(raw) || raw;
 }
 
@@ -2672,43 +2710,47 @@ export function uppercaseProductionLocation(value) {
   return uppercaseText(value);
 }
 
-export function findProductionInventoryEntry(value) {
+export function findProductionInventoryEntry(value, materialFilter = '') {
   const raw = uppercaseText(value).trim();
   if (!raw) return null;
 
   const normalizedArt = normalizeProductionArtNumber(raw);
   if (normalizedArt) {
-    return PRODUCTION_ARTICLE_LOCATIONS.find(item => item.art === normalizedArt) || null;
+    return PRODUCTION_ARTICLE_LOCATIONS.find(item => item.art === normalizedArt && materialMatches(item, materialFilter)) || null;
   }
 
-  const normalized = normalizeProductionLocation(raw);
+  const normalized = normalizeProductionLocation(raw, materialFilter);
   if (!normalized || normalizeProductionArtNumber(normalized)) return null;
   const normalizedCompact = compactLocation(normalized);
-  return PRODUCTION_ARTICLE_LOCATIONS.find(item => compactLocation(item.location) === normalizedCompact) || null;
+  return PRODUCTION_ARTICLE_LOCATIONS.find(item => materialMatches(item, materialFilter) && compactLocation(item.location) === normalizedCompact) || null;
 }
 
-export function findArticleByLocation(location) {
-  return findProductionInventoryEntry(location);
+export function findArticleByLocation(location, materialFilter = '') {
+  return findProductionInventoryEntry(location, materialFilter);
 }
 
-export function findLocationsByArticle(art) {
+export function findLocationsByArticle(art, materialFilter = '') {
   const normalizedArt = normalizeProductionArtNumber(art);
   if (!normalizedArt) return [];
-  return PRODUCTION_ARTICLE_LOCATIONS.filter(item => item.art === normalizedArt);
+  return PRODUCTION_ARTICLE_LOCATIONS.filter(item => item.art === normalizedArt && materialMatches(item, materialFilter));
 }
 
-export function searchProductionInventory(query, limit = 8) {
+export function searchProductionInventory(query, limit = 8, materialFilter = '') {
   const raw = uppercaseText(query).trim();
-  if (!raw || raw.length < 2) return [];
+  if (!raw || raw.length < 1) return [];
   const normalizedArt = normalizeProductionArtNumber(raw);
-  const normalizedLocation = normalizeProductionLocation(raw);
+  const normalizedLocation = normalizeProductionLocation(raw, materialFilter);
   const compactQuery = compactLocation(raw);
   const compactNormalizedLocation = compactLocation(normalizedLocation);
+  const suffixMatch = locationBySuffix(raw, materialFilter);
+  const suffixLocations = new Set((suffixMatch.matches || []).map(item => item.location));
 
   return PRODUCTION_ARTICLE_LOCATIONS
     .filter(item => {
+      if (!materialMatches(item, materialFilter)) return false;
       const itemLocationCompact = compactLocation(item.location);
-      return (normalizedArt && item.art.includes(normalizedArt))
+      return suffixLocations.has(item.location)
+        || (normalizedArt && item.art.includes(normalizedArt))
         || item.art.includes(raw)
         || item.location.includes(normalizedLocation)
         || itemLocationCompact.includes(compactQuery)
@@ -2718,11 +2760,8 @@ export function searchProductionInventory(query, limit = 8) {
 }
 
 export function getProductionInventoryStats() {
-  return {
-  "tende": 50,
-  "zijkap": 78,
-  "lamele": 74,
-  "onderkap. bovenkap": 168,
-  "zijgeleider": 151
-};
+  return getProductionMaterialOptions().reduce((acc, option) => {
+    acc[option.id] = option.count;
+    return acc;
+  }, {});
 }

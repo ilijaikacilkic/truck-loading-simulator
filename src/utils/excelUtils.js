@@ -406,10 +406,31 @@ function normalizeDailyQuantity(value) {
   return String(value ?? '').trim().replace('.', ',');
 }
 
+function normalizeDailyDescriptionText(description) {
+  return String(description || '')
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-z0-9]+/g, ' ');
+}
+
 export function inferDailyUnitOfMeasure(description) {
-  const text = String(description || '').toLowerCase();
+  const text = normalizeDailyDescriptionText(description);
   if (text.includes('zijkap')) return 'SET';
-  if (['bovenkap', 'onderkap', 'zijgeleider', 'lamel'].some(keyword => text.includes(keyword))) return 'M1';
+  const meterKeywords = [
+    'bovenkap',
+    'onderkap',
+    'onderlijst',
+    'onderlist',
+    'onderlijst met rubber',
+    'zijgeleider',
+    'zigel',
+    'ziegel',
+    'zijgel',
+    'geleider',
+    'lamel'
+  ];
+  if (meterKeywords.some(keyword => text.includes(keyword))) return 'M1';
   return 'STUK';
 }
 
