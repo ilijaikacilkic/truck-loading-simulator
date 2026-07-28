@@ -13,7 +13,20 @@ export const INVENTORY_STORAGE_KEY = 'verano-inventory-records-v1';
 export const PRODUCTION_WRITEOFF_STORAGE_KEY = 'productionWriteoffRowsV2';
 export const HISTORY_ARCHIVE_EMAIL = 'vsr-expedition-temp@verano.nl';
 export const BACKUP_SCHEMA_VERSION = 1;
-
+export const APP_QUOTES = [
+  'Marija čeka tabelu.',
+  'Ostavi napolitanku Jovane.',
+  'Počni da skeniraš Golube.',
+  'Pazi da ti Sveta nije iza ledja.',
+  'Koliko Rumenka ima bokseva???.',
+  'Daj plave bokseve....',
+  'Ajde ti, nije mi nidočega.',
+  'Sveta je bio na ostrvu!.',
+  'Kaži 8.',
+  'Yo1',
+  'Ide Sveta oko tebe, pazi da te ne ogrebe',
+  'Jova je najbolji, najpametniji i najjači radnik u Veranu. Hvala ti Jovo!'
+];
 
 export const DEFAULT_STATE = {
   trailer: { length: 13.6, width: 2.45 },
