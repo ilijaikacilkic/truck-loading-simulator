@@ -1010,3 +1010,101 @@ input{text-transform:none}input[placeholder="Bulk"],input[placeholder="Pick"],in
 /* v16.7 otpis fast input */
 .writeoff-material-picker{background:linear-gradient(180deg,#ffffff,#f8fbff);border:1px solid #dbeafe;border-radius:20px;padding:14px;display:grid;gap:8px;box-shadow:0 12px 28px #0f3a6608}.writeoff-material-picker label{display:grid;gap:7px}.writeoff-material-picker label span,.writeoff-active-location-panel label span,.writeoff-quantity-form label span{font-weight:1000;color:#0f3a66;font-size:12px;text-transform:uppercase;letter-spacing:.06em}.writeoff-material-picker select{min-height:50px;border-radius:15px;border:1px solid #bfdbfe;background:#fff;color:#0f3a66;font-size:18px;font-weight:1000;padding:0 12px}.writeoff-material-picker small{color:#64748b;font-weight:900}.writeoff-active-location-panel{display:grid;gap:10px}.writeoff-location-lock-field{display:grid;gap:7px;background:#f8fbff;border:1px solid #dbeafe;border-radius:20px;padding:14px}.writeoff-location-lock-field input{min-height:50px;border-radius:15px;border:1px solid #bfdbfe;background:#fff;color:#0f172a;font-size:20px;font-weight:900;padding:0 12px}.writeoff-active-location-card{display:flex;align-items:center;justify-content:space-between;gap:12px;background:linear-gradient(135deg,#e0f2fe,#f8fbff);border:1px solid #bfdbfe;border-radius:20px;padding:14px;color:#0f3a66}.writeoff-active-location-card div{display:grid;gap:3px}.writeoff-active-location-card span{font-size:12px;font-weight:1000;text-transform:uppercase;letter-spacing:.06em;color:#64748b}.writeoff-active-location-card b{font-size:24px;letter-spacing:.02em}.writeoff-active-location-card small{font-weight:900;color:#64748b}.writeoff-clear-location{width:42px;height:42px;border-radius:14px;justify-content:center;background:#fff!important;color:#b91c1c!important;border-color:#fecaca!important}.writeoff-quantity-form{display:grid;grid-template-columns:1fr auto;gap:12px;align-items:end;background:#f8fbff;border:1px solid #dbeafe;border-radius:20px;padding:14px}.writeoff-quantity-form label{display:grid;gap:7px}.writeoff-quantity-form input{min-height:54px;border-radius:15px;border:1px solid #bfdbfe;background:#fff;color:#0f172a;font-size:24px;font-weight:1000;padding:0 12px}.writeoff-quantity-form input:disabled{background:#eef2f7;color:#94a3b8}.writeoff-actions-row .danger{border-color:#fecaca;color:#b91c1c;background:#fff5f5}.writeoff-table-v2 td:nth-child(1){font-weight:900;color:#0f3a66}.writeoff-table-v2 td:nth-child(2){font-weight:900;color:#0f3a66}.writeoff-table-v2 td:nth-child(4){font-weight:1000;color:#0f3a66}.writeoff-table-v2 td:nth-child(5){color:#64748b;font-weight:800;font-size:13px}
 @media(max-width:768px){.writeoff-material-picker,.writeoff-location-lock-field,.writeoff-quantity-form{padding:12px;border-radius:18px}.writeoff-material-picker select,.writeoff-location-lock-field input{min-height:48px;font-size:17px}.writeoff-active-location-card{border-radius:18px}.writeoff-active-location-card b{font-size:21px}.writeoff-quantity-form{grid-template-columns:1fr}.writeoff-quantity-form input{min-height:52px;font-size:22px}.writeoff-quantity-form .writeoff-add-btn{width:100%;justify-content:center}.writeoff-table-v2 td:nth-child(1):before{content:'ART: '!important;font-weight:900;color:#0f3a66}.writeoff-table-v2 td:nth-child(2):before{content:'Materijal: '!important;font-weight:900;color:#0f3a66}.writeoff-table-v2 td:nth-child(3):before{content:'Lokacija: '!important;font-weight:900;color:#0f3a66}.writeoff-table-v2 td:nth-child(4):before{content:'Ukupno: '!important;font-weight:900;color:#0f3a66}.writeoff-table-v2 td:nth-child(5):before{content:'Vreme: '!important;font-weight:900;color:#0f3a66}.writeoff-table-v2 td:nth-child(6):before{content:'Akcija: '!important;font-weight:900;color:#0f3a66}.writeoff-table-v2 td:last-child{text-align:left!important;width:auto!important}}
+
+/* v16.9 dnevni refil: potvrda brisanja + cela kartica označena kao odneto na pik */
+.daily-refill-card-v145{
+  transition:background-color .18s ease,border-color .18s ease,box-shadow .18s ease,transform .12s ease;
+  cursor:default;
+}
+.daily-refill-card-v145.daily-refill-card-picked{
+  background:linear-gradient(180deg,#e8f8ed 0%,#dff4e6 100%)!important;
+  border-color:#9fd6ae!important;
+  box-shadow:0 10px 24px rgba(22,101,52,.12)!important;
+}
+.daily-refill-card-picked .daily-card-index{
+  background:#bfe8ca!important;
+  color:#14532d!important;
+  border-color:#8dcca0!important;
+}
+.daily-refill-card-picked .daily-card-main,
+.daily-refill-card-picked .daily-card-row,
+.daily-refill-card-picked label{
+  background:transparent!important;
+}
+.daily-refill-card-picked input,
+.daily-refill-card-picked textarea,
+.daily-refill-card-picked select{
+  background:#f3fcf6!important;
+  border-color:#a9d9b6!important;
+}
+.daily-refill-card-picked span,
+.daily-refill-card-picked label span{
+  color:#27623a;
+}
+.daily-card-status-actions{display:flex;align-items:center;gap:8px}
+.daily-picked-badge{
+  display:inline-flex;
+  align-items:center;
+  min-height:30px;
+  padding:5px 10px;
+  border-radius:999px;
+  background:#c9efd3;
+  border:1px solid #98d4a8;
+  color:#14532d!important;
+  font-size:12px;
+  line-height:1;
+  font-weight:1000;
+  white-space:nowrap;
+}
+.daily-confirm-overlay{
+  position:fixed;
+  inset:0;
+  z-index:10000;
+  display:grid;
+  place-items:center;
+  padding:18px;
+  background:rgba(15,23,42,.48);
+  backdrop-filter:blur(3px);
+}
+.daily-confirm-dialog{
+  width:min(430px,100%);
+  display:grid;
+  gap:16px;
+  padding:20px;
+  border:1px solid #dbeafe;
+  border-radius:22px;
+  background:#fff;
+  box-shadow:0 28px 70px rgba(15,23,42,.28);
+}
+.daily-confirm-dialog h3{
+  margin:0;
+  color:#0f3a66;
+  font-size:21px;
+  line-height:1.3;
+  text-align:center;
+}
+.daily-confirm-item{
+  display:grid;
+  gap:4px;
+  padding:12px 14px;
+  border:1px solid #dbeafe;
+  border-radius:15px;
+  background:#f8fbff;
+  color:#0f3a66;
+  text-align:center;
+}
+.daily-confirm-item span{color:#64748b;font-weight:800}
+.daily-confirm-actions{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.daily-confirm-actions button{min-height:48px;justify-content:center;border-radius:14px;font-size:16px;font-weight:1000}
+.daily-confirm-yes{
+  background:#dc2626!important;
+  border-color:#dc2626!important;
+  color:#fff!important;
+}
+.daily-confirm-yes:hover{background:#b91c1c!important;border-color:#b91c1c!important}
+@media(max-width:768px){
+  .daily-refill-card-v145.daily-refill-card-picked{background:linear-gradient(180deg,#e8f8ed,#dcf2e3)!important}
+  .daily-card-status-actions{gap:6px}
+  .daily-picked-badge{padding:5px 8px;font-size:11px}
+  .daily-confirm-dialog{padding:18px;border-radius:20px}
+}

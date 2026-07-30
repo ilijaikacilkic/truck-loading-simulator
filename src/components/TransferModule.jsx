@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { Trash2, Plus, FileSpreadsheet, Mail, UploadCloud, ClipboardList, ArrowLeft } from 'lucide-react';
 import { TRANSFER_EMAIL } from '../utils/constants.js';
 import { cleanLocationInput, normalizeArtNumber, normalizeWarehouseLocation } from '../utils/dataFormat.js';
+import { findProductionInventoryEntry, searchProductionInventory, uppercaseProductionLocation } from '../utils/productionInventory.js';
 import {
   downloadDailyRefillXlsx,
   formatDailyRefillRowsForEmail,
@@ -41,6 +42,7 @@ export default function TransferModule({ ctx }) {
   const [dailyFileName, setDailyFileName] = useState(draft.fileName);
   const [dailyUploadError, setDailyUploadError] = useState('');
   const [dailyLoading, setDailyLoading] = useState(false);
+  const [dailyDeleteCandidate, setDailyDeleteCandidate] = useState(null);
   const [dailySavedAt, setDailySavedAt] = useState(draft.savedAt);
   const fileInputRef = useRef(null);
   const autosaveTimerRef = useRef(null);
@@ -63,6 +65,15 @@ export default function TransferModule({ ctx }) {
     }, 500);
     return () => clearTimeout(autosaveTimerRef.current);
   }, [dailyRows, dailyFileName]);
+
+  const bulkLocationSuggestions = searchProductionInventory(transferForm.from, 12);
+  const pickLocationSuggestions = searchProductionInventory(transferForm.to, 12);
+
+  function resolveTransferLocation(field) {
+    const entry = findProductionInventoryEntry(transferForm[field]);
+    if (!entry) return;
+    setTransferForm(current => ({ ...current, [field]: entry.location, art: current.art || entry.art.replace('ART-', '') }));
+  }
 
   if (appView !== 'transfer') return null;
 
@@ -110,8 +121,23 @@ export default function TransferModule({ ctx }) {
     }]);
   }
 
-  function deleteDailyRow(id) {
-    setDailyRows(rows => rows.filter(row => row.id !== id));
+  function requestDeleteDailyRow(row) {
+    setDailyDeleteCandidate(row);
+  }
+
+  function cancelDeleteDailyRow() {
+    setDailyDeleteCandidate(null);
+  }
+
+  function confirmDeleteDailyRow() {
+    if (!dailyDeleteCandidate?.id) return;
+    setDailyRows(rows => rows.filter(row => row.id !== dailyDeleteCandidate.id));
+    setDailyDeleteCandidate(null);
+  }
+
+  function toggleDailyPicked(rowId, event) {
+    if (event?.target?.closest('button, input, select, textarea, a, label')) return;
+    setDailyRows(rows => rows.map(row => row.id === rowId ? { ...row, picked: !row.picked } : row));
   }
 
   function downloadDailyRefill() {
@@ -186,12 +212,20 @@ Pozdrav`);
         </div>
 
         <div className="daily-refill-list daily-refill-list-v145">
-          {dailyRows.map((row, index) => <article className="daily-refill-card daily-refill-card-v145" key={row.id}>
+          {dailyRows.map((row, index) => <article
+            className={`daily-refill-card daily-refill-card-v145${row.picked ? ' daily-refill-card-picked' : ''}`}
+            key={row.id}
+            onDoubleClick={event => toggleDailyPicked(row.id, event)}
+            title={row.picked ? 'Double click za vraćanje na neodrađeno' : 'Double click kada je materijal odnet na pik'}
+          >
             <div className="daily-card-index">{index + 1}</div>
             <div className="daily-card-main">
               <div className="daily-card-row daily-card-art-row">
                 <label><span>ART</span><input inputMode="numeric" value={row.art || ''} onChange={e => updateDailyRow(row.id, { art: e.target.value.toUpperCase() })} onBlur={e => updateDailyRow(row.id, { art: normalizeArtNumber(e.target.value) })}/></label>
-                <button className="icon-danger daily-delete-row" onClick={() => deleteDailyRow(row.id)} title="Obriši stavku"><Trash2 size={15}/></button>
+                <div className="daily-card-status-actions">
+                  {row.picked && <span className="daily-picked-badge">Na piku</span>}
+                  <button className="icon-danger daily-delete-row" onClick={() => requestDeleteDailyRow(row)} title="Obriši stavku"><Trash2 size={15}/></button>
+                </div>
               </div>
               <div className="daily-card-row daily-card-locations-row">
                 <label><span>Bulk</span><input value={row.bulkLocation || ''} onChange={e => updateDailyRow(row.id, { bulkLocation: cleanLocationInput(e.target.value) })} onBlur={e => normalizeDailyLocation(row.id, 'bulkLocation', e.target.value)}/></label>
@@ -204,14 +238,28 @@ Pozdrav`);
           </article>)}
         </div>
       </>}
+
+      {dailyDeleteCandidate && <div className="daily-confirm-overlay" role="presentation" onMouseDown={cancelDeleteDailyRow}>
+        <div className="daily-confirm-dialog" role="dialog" aria-modal="true" aria-labelledby="daily-delete-title" onMouseDown={event => event.stopPropagation()}>
+          <h3 id="daily-delete-title">Da li sigurno želiš da obrišeš ovu stavku?</h3>
+          <div className="daily-confirm-item">
+            <b>{dailyDeleteCandidate.art || 'Bez ART broja'}</b>
+            {dailyDeleteCandidate.pickLocation && <span>Pick: {dailyDeleteCandidate.pickLocation}</span>}
+          </div>
+          <div className="daily-confirm-actions">
+            <button className="ghost" onClick={cancelDeleteDailyRow}>Ne</button>
+            <button className="daily-confirm-yes" onClick={confirmDeleteDailyRow}>Da</button>
+          </div>
+        </div>
+      </div>}
     </section> : <section className="simple-module transfer-module">
       <div className="daily-refill-entry-row"><button className="daily-refill-main-button" onClick={() => setTransferView('daily')}><ClipboardList size={18}/> Dnevni refil</button></div>
       <h2>Dopuna materijala</h2>
       <div className="form-grid">
         <label className="art-input-wrap"><span>ART-</span><input placeholder="123456" inputMode="numeric" maxLength="6" value={transferForm.art} onChange={e => setTransferForm(f => ({...f, art:e.target.value.replace(/\D/g, '').slice(0, 6)}))}/></label>
         <input placeholder="Količina" inputMode="decimal" value={transferForm.qty} onChange={e => setTransferForm(f => ({...f, qty:e.target.value}))}/>
-        <input placeholder="Bulk" value={transferForm.from} onChange={e => setTransferForm(f => ({...f, from:cleanLocationInput(e.target.value)}))} onBlur={e => setTransferForm(f => ({...f, from:normalizeWarehouseLocation(e.target.value)}))}/>
-        <input placeholder="Pick" value={transferForm.to} onChange={e => setTransferForm(f => ({...f, to:cleanLocationInput(e.target.value)}))} onBlur={e => setTransferForm(f => ({...f, to:normalizeWarehouseLocation(e.target.value)}))}/>
+        <><input list="bulk-location-options" placeholder="Bulk" value={transferForm.from} onChange={e => setTransferForm(f => ({...f, from:uppercaseProductionLocation(e.target.value)}))} onBlur={() => resolveTransferLocation('from')}/><datalist id="bulk-location-options">{bulkLocationSuggestions.map(item => <option key={`${item.art}-${item.location}`} value={item.location}>{item.art}</option>)}</datalist></>
+        <><input list="pick-location-options" placeholder="Pick" value={transferForm.to} onChange={e => setTransferForm(f => ({...f, to:uppercaseProductionLocation(e.target.value)}))} onBlur={() => resolveTransferLocation('to')}/><datalist id="pick-location-options">{pickLocationSuggestions.map(item => <option key={`${item.art}-${item.location}`} value={item.location}>{item.art}</option>)}</datalist></>
         <input className="wide" placeholder="Opis / napomena" value={transferForm.note} onChange={e => setTransferForm(f => ({...f, note:e.target.value}))}/>
         <div className="wide form-actions">
           <button onClick={saveTransferRecord}><Plus size={16}/> Dodaj stavku</button>
