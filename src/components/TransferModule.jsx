@@ -79,6 +79,10 @@ export default function TransferModule({ ctx }) {
 
   const dailyExportRows = dailyRows.filter(row => String(row.art || '').trim());
   const dailyItemCount = dailyExportRows.length;
+  const dailyDisplayRows = dailyRows
+    .map((row, originalIndex) => ({ row, originalIndex }))
+    .sort((a, b) => Number(Boolean(a.row.picked)) - Number(Boolean(b.row.picked)) || a.originalIndex - b.originalIndex)
+    .map(({ row }) => row);
 
   async function handleDailyFileUpload(file) {
     if (!file) return;
@@ -212,7 +216,7 @@ Pozdrav`);
         </div>
 
         <div className="daily-refill-list daily-refill-list-v145">
-          {dailyRows.map((row, index) => <article
+          {dailyDisplayRows.map((row, index) => <article
             className={`daily-refill-card daily-refill-card-v145${row.picked ? ' daily-refill-card-picked' : ''}`}
             key={row.id}
             onDoubleClick={event => toggleDailyPicked(row.id, event)}
