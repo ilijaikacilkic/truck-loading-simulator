@@ -43,6 +43,9 @@ export default function TransferModule({ ctx }) {
   const [dailyUploadError, setDailyUploadError] = useState('');
   const [dailyLoading, setDailyLoading] = useState(false);
   const [dailyDeleteCandidate, setDailyDeleteCandidate] = useState(null);
+  const [dailyMoveAnimation, setDailyMoveAnimation] = useState(null);
+  const [dailyArrivedRowId, setDailyArrivedRowId] = useState(null);
+  const [dailyExportedIds, setDailyExportedIds] = useState([]);
   const [dailySavedAt, setDailySavedAt] = useState(draft.savedAt);
   const fileInputRef = useRef(null);
   const autosaveTimerRef = useRef(null);
@@ -77,8 +80,9 @@ export default function TransferModule({ ctx }) {
 
   if (appView !== 'transfer') return null;
 
-  const dailyExportRows = dailyRows.filter(row => String(row.art || '').trim());
-  const dailyItemCount = dailyExportRows.length;
+  const dailyValidRows = dailyRows.filter(row => String(row.art || '').trim());
+  const dailyExportRows = dailyValidRows.filter(row => row.picked);
+  const dailyItemCount = dailyValidRows.length;
   const dailyDisplayRows = dailyRows
     .map((row, originalIndex) => ({ row, originalIndex }))
     .sort((a, b) => Number(Boolean(a.row.picked)) - Number(Boolean(b.row.picked)) || a.originalIndex - b.originalIndex)
@@ -141,20 +145,46 @@ export default function TransferModule({ ctx }) {
 
   function toggleDailyPicked(rowId, event) {
     if (event?.target?.closest('button, input, select, textarea, a, label')) return;
-    setDailyRows(rows => rows.map(row => row.id === rowId ? { ...row, picked: !row.picked } : row));
+    if (dailyMoveAnimation) return;
+    const currentRow = dailyRows.find(row => row.id === rowId);
+    if (!currentRow) return;
+    const targetPicked = !currentRow.picked;
+    setDailyMoveAnimation({ id: rowId, targetPicked });
+    window.setTimeout(() => {
+      setDailyRows(rows => rows.map(row => row.id === rowId ? { ...row, picked: targetPicked } : row));
+      setDailyMoveAnimation(null);
+      setDailyArrivedRowId(rowId);
+      window.setTimeout(() => setDailyArrivedRowId(current => current === rowId ? null : current), 650);
+    }, 650);
+  }
+
+  function requestRemoveExportedRows() {
+    setDailyExportedIds(dailyExportRows.map(row => row.id));
+  }
+
+  function keepExportedRows() {
+    setDailyExportedIds([]);
+  }
+
+  function removeExportedRows() {
+    if (!dailyExportedIds.length) return;
+    const ids = new Set(dailyExportedIds);
+    setDailyRows(rows => rows.filter(row => !ids.has(row.id)));
+    setDailyExportedIds([]);
   }
 
   function downloadDailyRefill() {
-    if (!dailyItemCount) {
-      alert('Nema stavki sa popunjenim ART brojem za export.');
+    if (!dailyExportRows.length) {
+      alert('Nema zelenih stavki za export. Označi završene stavke double-clickom.');
       return;
     }
     downloadDailyRefillXlsx(dailyExportRows);
+    requestRemoveExportedRows();
   }
 
   function emailDailyRefill() {
-    if (!dailyItemCount) {
-      alert('Nema stavki sa popunjenim ART brojem za export.');
+    if (!dailyExportRows.length) {
+      alert('Nema zelenih stavki za export. Označi završene stavke double-clickom.');
       return;
     }
     downloadDailyRefillXlsx(dailyExportRows);
@@ -172,6 +202,7 @@ ${formatDailyRefillRowsForEmail(dailyExportRows)}
 
 Pozdrav`);
     window.location.href = `mailto:${TRANSFER_EMAIL}?subject=${subject}&body=${body}`;
+    window.setTimeout(requestRemoveExportedRows, 250);
   }
 
   function normalizeDailyLocation(id, field, value) {
@@ -216,18 +247,25 @@ Pozdrav`);
         </div>
 
         <div className="daily-refill-list daily-refill-list-v145">
-          {dailyDisplayRows.map((row, index) => <article
-            className={`daily-refill-card daily-refill-card-v145${row.picked ? ' daily-refill-card-picked' : ''}`}
+          {dailyDisplayRows.map((row, index) => {
+            const moveState = dailyMoveAnimation?.id === row.id ? dailyMoveAnimation : null;
+            const visuallyPicked = moveState ? moveState.targetPicked : Boolean(row.picked);
+            const movementClass = moveState
+              ? (moveState.targetPicked ? ' daily-refill-card-moving-down' : ' daily-refill-card-moving-up')
+              : '';
+            const arrivedClass = dailyArrivedRowId === row.id ? ' daily-refill-card-arrived' : '';
+            return <article
+            className={`daily-refill-card daily-refill-card-v145${visuallyPicked ? ' daily-refill-card-picked' : ''}${movementClass}${arrivedClass}`}
             key={row.id}
             onDoubleClick={event => toggleDailyPicked(row.id, event)}
-            title={row.picked ? 'Double click za vraćanje na neodrađeno' : 'Double click kada je materijal odnet na pik'}
+            title={visuallyPicked ? 'Double click za vraćanje na neodrađeno' : 'Double click kada je materijal odnet na pik'}
           >
             <div className="daily-card-index">{index + 1}</div>
             <div className="daily-card-main">
               <div className="daily-card-row daily-card-art-row">
                 <label><span>ART</span><input inputMode="numeric" value={row.art || ''} onChange={e => updateDailyRow(row.id, { art: e.target.value.toUpperCase() })} onBlur={e => updateDailyRow(row.id, { art: normalizeArtNumber(e.target.value) })}/></label>
                 <div className="daily-card-status-actions">
-                  {row.picked && <span className="daily-picked-badge">Na piku</span>}
+                  {visuallyPicked && <span className="daily-picked-badge">Na piku</span>}
                   <button className="icon-danger daily-delete-row" onClick={() => requestDeleteDailyRow(row)} title="Obriši stavku"><Trash2 size={15}/></button>
                 </div>
               </div>
@@ -239,7 +277,8 @@ Pozdrav`);
               <label className="daily-description-edit"><span>Opis</span><input value={row.description || ''} onChange={e => updateDailyRow(row.id, { description: e.target.value })}/></label>
               <label className="daily-description-edit daily-note-edit"><span>Napomena</span><input value={row.note || ''} onChange={e => updateDailyRow(row.id, { note: e.target.value })} placeholder="Interna napomena"/></label>
             </div>
-          </article>)}
+          </article>;
+          })}
         </div>
       </>}
 
@@ -253,6 +292,20 @@ Pozdrav`);
           <div className="daily-confirm-actions">
             <button className="ghost" onClick={cancelDeleteDailyRow}>Ne</button>
             <button className="daily-confirm-yes" onClick={confirmDeleteDailyRow}>Da</button>
+          </div>
+        </div>
+      </div>}
+
+      {!!dailyExportedIds.length && <div className="daily-confirm-overlay" role="presentation" onMouseDown={keepExportedRows}>
+        <div className="daily-confirm-dialog" role="dialog" aria-modal="true" aria-labelledby="daily-export-title" onMouseDown={event => event.stopPropagation()}>
+          <h3 id="daily-export-title">Excel je napravljen. Ukloniti izvezene zelene stavke?</h3>
+          <div className="daily-confirm-item">
+            <b>{dailyExportedIds.length} izvezenih stavki</b>
+            <span>Plave stavke ostaju u dnevnom refilu.</span>
+          </div>
+          <div className="daily-confirm-actions">
+            <button className="ghost" onClick={keepExportedRows}>Ne</button>
+            <button className="daily-confirm-yes" onClick={removeExportedRows}>Da</button>
           </div>
         </div>
       </div>}

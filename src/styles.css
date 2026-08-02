@@ -1108,3 +1108,41 @@ input{text-transform:none}input[placeholder="Bulk"],input[placeholder="Pick"],in
   .daily-picked-badge{padding:5px 8px;font-size:11px}
   .daily-confirm-dialog{padding:18px;border-radius:20px}
 }
+
+/* v16.11 dnevni refil: jasnija promena statusa i odloženo premeštanje kartice */
+.daily-refill-card-moving-down{
+  pointer-events:none;
+  animation:dailyRefillCompleteMove .65s cubic-bezier(.22,.61,.36,1) forwards;
+  position:relative;
+  z-index:4;
+}
+.daily-refill-card-moving-up{
+  pointer-events:none;
+  animation:dailyRefillReopenMove .65s cubic-bezier(.22,.61,.36,1) forwards;
+  position:relative;
+  z-index:4;
+}
+.daily-refill-card-arrived{
+  animation:dailyRefillArrive .6s cubic-bezier(.22,.61,.36,1);
+}
+@keyframes dailyRefillCompleteMove{
+  0%{transform:scale(1);opacity:1;filter:brightness(1)}
+  28%{transform:scale(1.018);opacity:1;filter:brightness(1.04);box-shadow:0 16px 34px rgba(22,101,52,.22)}
+  58%{transform:translateY(5px) scale(1.01);opacity:.92}
+  100%{transform:translateY(24px) scale(.985);opacity:.08}
+}
+@keyframes dailyRefillReopenMove{
+  0%{transform:scale(1);opacity:1}
+  30%{transform:scale(1.018);opacity:1;box-shadow:0 16px 34px rgba(37,99,235,.18)}
+  100%{transform:translateY(-22px) scale(.985);opacity:.08}
+}
+@keyframes dailyRefillArrive{
+  0%{opacity:0;transform:translateY(-14px) scale(.985)}
+  55%{opacity:1;transform:translateY(3px) scale(1.008)}
+  100%{opacity:1;transform:translateY(0) scale(1)}
+}
+@media (prefers-reduced-motion:reduce){
+  .daily-refill-card-moving-down,
+  .daily-refill-card-moving-up,
+  .daily-refill-card-arrived{animation-duration:.01ms!important}
+}
