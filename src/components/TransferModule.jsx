@@ -6,7 +6,6 @@ import { findProductionInventoryEntry, searchProductionInventory, uppercaseProdu
 import {
   downloadDailyRefillXlsx,
   formatDailyRefillRowsForEmail,
-  makeDailyRefillFilename,
   parseDailyRefillXlsx,
   todaySrDate
 } from '../utils/excelUtils.js';
@@ -45,7 +44,6 @@ export default function TransferModule({ ctx }) {
   const [dailyDeleteCandidate, setDailyDeleteCandidate] = useState(null);
   const [dailyMoveAnimation, setDailyMoveAnimation] = useState(null);
   const [dailyArrivedRowId, setDailyArrivedRowId] = useState(null);
-  const [dailyExportedIds, setDailyExportedIds] = useState([]);
   const [dailySavedAt, setDailySavedAt] = useState(draft.savedAt);
   const fileInputRef = useRef(null);
   const autosaveTimerRef = useRef(null);
@@ -85,7 +83,15 @@ export default function TransferModule({ ctx }) {
   const dailyItemCount = dailyValidRows.length;
   const dailyDisplayRows = dailyRows
     .map((row, originalIndex) => ({ row, originalIndex }))
-    .sort((a, b) => Number(Boolean(a.row.picked)) - Number(Boolean(b.row.picked)) || a.originalIndex - b.originalIndex)
+    .sort((a, b) => {
+      const aPicked = Boolean(a.row.picked);
+      const bPicked = Boolean(b.row.picked);
+      if (aPicked !== bPicked) return Number(aPicked) - Number(bPicked);
+      if (!aPicked) return a.originalIndex - b.originalIndex;
+      const aPickedAt = new Date(a.row.pickedAt || 0).getTime();
+      const bPickedAt = new Date(b.row.pickedAt || 0).getTime();
+      return bPickedAt - aPickedAt || a.originalIndex - b.originalIndex;
+    })
     .map(({ row }) => row);
 
   async function handleDailyFileUpload(file) {
@@ -151,27 +157,17 @@ export default function TransferModule({ ctx }) {
     const targetPicked = !currentRow.picked;
     setDailyMoveAnimation({ id: rowId, targetPicked });
     window.setTimeout(() => {
-      setDailyRows(rows => rows.map(row => row.id === rowId ? { ...row, picked: targetPicked } : row));
+      setDailyRows(rows => rows.map(row => row.id === rowId ? {
+        ...row,
+        picked: targetPicked,
+        pickedAt: targetPicked ? new Date().toISOString() : ''
+      } : row));
       setDailyMoveAnimation(null);
       setDailyArrivedRowId(rowId);
       window.setTimeout(() => setDailyArrivedRowId(current => current === rowId ? null : current), 650);
     }, 650);
   }
 
-  function requestRemoveExportedRows() {
-    setDailyExportedIds(dailyExportRows.map(row => row.id));
-  }
-
-  function keepExportedRows() {
-    setDailyExportedIds([]);
-  }
-
-  function removeExportedRows() {
-    if (!dailyExportedIds.length) return;
-    const ids = new Set(dailyExportedIds);
-    setDailyRows(rows => rows.filter(row => !ids.has(row.id)));
-    setDailyExportedIds([]);
-  }
 
   function downloadDailyRefill() {
     if (!dailyExportRows.length) {
@@ -179,30 +175,29 @@ export default function TransferModule({ ctx }) {
       return;
     }
     downloadDailyRefillXlsx(dailyExportRows);
-    requestRemoveExportedRows();
   }
 
   function emailDailyRefill() {
     if (!dailyExportRows.length) {
-      alert('Nema zelenih stavki za export. Označi završene stavke double-clickom.');
+      alert('Nema zelenih stavki za slanje. Označi završene stavke double-clickom.');
       return;
     }
-    downloadDailyRefillXlsx(dailyExportRows);
+
+    const exportedIds = new Set(dailyExportRows.map(row => row.id));
     const subject = encodeURIComponent(`Dnevni refil - ${todaySrDate()}`);
     const body = encodeURIComponent(`Dnevni refil
 Datum: ${todaySrDate()}
 
-Skinut je Excel fajl: ${makeDailyRefillFilename()}
-
-U prilogu treba dodati preuzeti Excel fajl.
+Pre slanja priloži prethodno preuzeti Excel fajl.
 
 Pregled stavki:
 
 ${formatDailyRefillRowsForEmail(dailyExportRows)}
 
 Pozdrav`);
+
     window.location.href = `mailto:${TRANSFER_EMAIL}?subject=${subject}&body=${body}`;
-    window.setTimeout(requestRemoveExportedRows, 250);
+    setDailyRows(rows => rows.filter(row => !exportedIds.has(row.id)));
   }
 
   function normalizeDailyLocation(id, field, value) {
@@ -292,20 +287,6 @@ Pozdrav`);
           <div className="daily-confirm-actions">
             <button className="ghost" onClick={cancelDeleteDailyRow}>Ne</button>
             <button className="daily-confirm-yes" onClick={confirmDeleteDailyRow}>Da</button>
-          </div>
-        </div>
-      </div>}
-
-      {!!dailyExportedIds.length && <div className="daily-confirm-overlay" role="presentation" onMouseDown={keepExportedRows}>
-        <div className="daily-confirm-dialog" role="dialog" aria-modal="true" aria-labelledby="daily-export-title" onMouseDown={event => event.stopPropagation()}>
-          <h3 id="daily-export-title">Excel je napravljen. Ukloniti izvezene zelene stavke?</h3>
-          <div className="daily-confirm-item">
-            <b>{dailyExportedIds.length} izvezenih stavki</b>
-            <span>Plave stavke ostaju u dnevnom refilu.</span>
-          </div>
-          <div className="daily-confirm-actions">
-            <button className="ghost" onClick={keepExportedRows}>Ne</button>
-            <button className="daily-confirm-yes" onClick={removeExportedRows}>Da</button>
           </div>
         </div>
       </div>}
