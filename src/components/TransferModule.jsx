@@ -1,11 +1,12 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Trash2, Plus, FileSpreadsheet, Mail, UploadCloud, ClipboardList, ArrowLeft } from 'lucide-react';
 import { TRANSFER_EMAIL } from '../utils/constants.js';
-import { cleanLocationInput, normalizeArtNumber, normalizeWarehouseLocation } from '../utils/dataFormat.js';
-import { findProductionInventoryEntry, searchProductionInventory, uppercaseProductionLocation } from '../utils/productionInventory.js';
+import { cleanLocationInput, normalizeArtNumber } from '../utils/dataFormat.js';
+import { findProductionInventoryEntry, normalizeProductionLocation, searchProductionInventory, uppercaseProductionLocation } from '../utils/productionInventory.js';
 import {
   downloadDailyRefillXlsx,
   formatDailyRefillRowsForEmail,
+  makeDailyRefillFilename,
   parseDailyRefillXlsx,
   todaySrDate
 } from '../utils/excelUtils.js';
@@ -67,13 +68,29 @@ export default function TransferModule({ ctx }) {
     return () => clearTimeout(autosaveTimerRef.current);
   }, [dailyRows, dailyFileName]);
 
+  const transferArtSuggestions = searchProductionInventory(transferForm.art, 12);
   const bulkLocationSuggestions = searchProductionInventory(transferForm.from, 12);
   const pickLocationSuggestions = searchProductionInventory(transferForm.to, 12);
 
-  function resolveTransferLocation(field) {
-    const entry = findProductionInventoryEntry(transferForm[field]);
+  function resolveTransferArt() {
+    const entry = findProductionInventoryEntry(transferForm.art);
     if (!entry) return;
-    setTransferForm(current => ({ ...current, [field]: entry.location, art: current.art || entry.art.replace('ART-', '') }));
+    setTransferForm(current => ({
+      ...current,
+      art: entry.art.replace('ART-', ''),
+      from: current.from || entry.location
+    }));
+  }
+
+  function resolveTransferLocation(field) {
+    const value = transferForm[field];
+    const entry = findProductionInventoryEntry(value);
+    if (entry) {
+      setTransferForm(current => ({ ...current, [field]: entry.location, art: entry.art.replace('ART-', '') }));
+      return;
+    }
+    const normalized = normalizeProductionLocation(value);
+    if (normalized !== value) setTransferForm(current => ({ ...current, [field]: normalized }));
   }
 
   if (appView !== 'transfer') return null;
@@ -88,9 +105,10 @@ export default function TransferModule({ ctx }) {
       const bPicked = Boolean(b.row.picked);
       if (aPicked !== bPicked) return Number(aPicked) - Number(bPicked);
       if (!aPicked) return a.originalIndex - b.originalIndex;
-      const aPickedAt = new Date(a.row.pickedAt || 0).getTime();
-      const bPickedAt = new Date(b.row.pickedAt || 0).getTime();
-      return bPickedAt - aPickedAt || a.originalIndex - b.originalIndex;
+      const aTime = Date.parse(a.row.pickedAt || '') || 0;
+      const bTime = Date.parse(b.row.pickedAt || '') || 0;
+      if (aTime !== bTime) return bTime - aTime;
+      return b.originalIndex - a.originalIndex;
     })
     .map(({ row }) => row);
 
@@ -122,6 +140,28 @@ export default function TransferModule({ ctx }) {
     setDailyRows(rows => rows.map(row => row.id === id ? { ...row, ...patch } : row));
   }
 
+  function resolveDailyArt(id, value) {
+    const entry = findProductionInventoryEntry(value);
+    setDailyRows(rows => rows.map(row => {
+      if (row.id !== id) return row;
+      if (!entry) return { ...row, art: normalizeArtNumber(value) || String(value || '').toUpperCase() };
+      return {
+        ...row,
+        art: entry.art,
+        bulkLocation: row.bulkLocation || entry.location
+      };
+    }));
+  }
+
+  function resolveDailyLocation(id, field, value) {
+    const entry = findProductionInventoryEntry(value);
+    setDailyRows(rows => rows.map(row => {
+      if (row.id !== id) return row;
+      if (entry) return { ...row, [field]: entry.location, art: entry.art };
+      return { ...row, [field]: normalizeProductionLocation(value) };
+    }));
+  }
+
   function addEmptyDailyRow() {
     setDailyRows(rows => [...rows, {
       id: crypto?.randomUUID?.() || `${Date.now()}-${Math.random()}`,
@@ -131,6 +171,8 @@ export default function TransferModule({ ctx }) {
       transferQty: '',
       pickLocation: '',
       note: '',
+      picked: false,
+      pickedAt: '',
       createdAt: new Date().toISOString()
     }]);
   }
@@ -164,10 +206,9 @@ export default function TransferModule({ ctx }) {
       } : row));
       setDailyMoveAnimation(null);
       setDailyArrivedRowId(rowId);
-      window.setTimeout(() => setDailyArrivedRowId(current => current === rowId ? null : current), 650);
-    }, 650);
+      window.setTimeout(() => setDailyArrivedRowId(current => current === rowId ? null : current), 800);
+    }, 800);
   }
-
 
   function downloadDailyRefill() {
     if (!dailyExportRows.length) {
@@ -179,29 +220,28 @@ export default function TransferModule({ ctx }) {
 
   function emailDailyRefill() {
     if (!dailyExportRows.length) {
-      alert('Nema zelenih stavki za slanje. Označi završene stavke double-clickom.');
+      alert('Nema zelenih stavki za export. Označi završene stavke double-clickom.');
       return;
     }
-
-    const exportedIds = new Set(dailyExportRows.map(row => row.id));
+    downloadDailyRefillXlsx(dailyExportRows);
     const subject = encodeURIComponent(`Dnevni refil - ${todaySrDate()}`);
     const body = encodeURIComponent(`Dnevni refil
 Datum: ${todaySrDate()}
 
-Pre slanja priloži prethodno preuzeti Excel fajl.
+Skinut je Excel fajl: ${makeDailyRefillFilename()}
+
+U prilogu treba dodati preuzeti Excel fajl.
 
 Pregled stavki:
 
 ${formatDailyRefillRowsForEmail(dailyExportRows)}
 
 Pozdrav`);
-
+    const exportedIds = new Set(dailyExportRows.map(row => row.id));
     window.location.href = `mailto:${TRANSFER_EMAIL}?subject=${subject}&body=${body}`;
-    setDailyRows(rows => rows.filter(row => !exportedIds.has(row.id)));
-  }
-
-  function normalizeDailyLocation(id, field, value) {
-    updateDailyRow(id, { [field]: normalizeWarehouseLocation(value) });
+    window.setTimeout(() => {
+      setDailyRows(rows => rows.filter(row => !exportedIds.has(row.id)));
+    }, 250);
   }
 
   return <>
@@ -258,16 +298,16 @@ Pozdrav`);
             <div className="daily-card-index">{index + 1}</div>
             <div className="daily-card-main">
               <div className="daily-card-row daily-card-art-row">
-                <label><span>ART</span><input inputMode="numeric" value={row.art || ''} onChange={e => updateDailyRow(row.id, { art: e.target.value.toUpperCase() })} onBlur={e => updateDailyRow(row.id, { art: normalizeArtNumber(e.target.value) })}/></label>
+                <label><span>ART</span><input list={`daily-art-options-${row.id}`} inputMode="numeric" value={row.art || ''} onChange={e => updateDailyRow(row.id, { art: e.target.value.toUpperCase() })} onBlur={e => resolveDailyArt(row.id, e.target.value)}/><datalist id={`daily-art-options-${row.id}`}>{searchProductionInventory(row.art, 10).map(item => <option key={`${row.id}-art-${item.art}-${item.location}`} value={item.art}>{item.location}</option>)}</datalist></label>
                 <div className="daily-card-status-actions">
                   {visuallyPicked && <span className="daily-picked-badge">Na piku</span>}
                   <button className="icon-danger daily-delete-row" onClick={() => requestDeleteDailyRow(row)} title="Obriši stavku"><Trash2 size={15}/></button>
                 </div>
               </div>
               <div className="daily-card-row daily-card-locations-row">
-                <label><span>Bulk</span><input value={row.bulkLocation || ''} onChange={e => updateDailyRow(row.id, { bulkLocation: cleanLocationInput(e.target.value) })} onBlur={e => normalizeDailyLocation(row.id, 'bulkLocation', e.target.value)}/></label>
+                <label><span>Bulk</span><input list={`daily-bulk-options-${row.id}`} value={row.bulkLocation || ''} onChange={e => updateDailyRow(row.id, { bulkLocation: cleanLocationInput(e.target.value) })} onBlur={e => resolveDailyLocation(row.id, 'bulkLocation', e.target.value)}/><datalist id={`daily-bulk-options-${row.id}`}>{searchProductionInventory(row.bulkLocation, 10).map(item => <option key={`${row.id}-bulk-${item.art}-${item.location}`} value={item.location}>{item.art}</option>)}</datalist></label>
                 <label><span>Količina</span><input inputMode="decimal" value={row.transferQty || ''} onChange={e => updateDailyRow(row.id, { transferQty: e.target.value })}/></label>
-                <label className="daily-pick-field"><span>Pick</span><input value={row.pickLocation || ''} onChange={e => updateDailyRow(row.id, { pickLocation: cleanLocationInput(e.target.value) })} onBlur={e => normalizeDailyLocation(row.id, 'pickLocation', e.target.value)}/></label>
+                <label className="daily-pick-field"><span>Pick</span><input list={`daily-pick-options-${row.id}`} value={row.pickLocation || ''} onChange={e => updateDailyRow(row.id, { pickLocation: cleanLocationInput(e.target.value) })} onBlur={e => resolveDailyLocation(row.id, 'pickLocation', e.target.value)}/><datalist id={`daily-pick-options-${row.id}`}>{searchProductionInventory(row.pickLocation, 10).map(item => <option key={`${row.id}-pick-${item.art}-${item.location}`} value={item.location}>{item.art}</option>)}</datalist></label>
               </div>
               <label className="daily-description-edit"><span>Opis</span><input value={row.description || ''} onChange={e => updateDailyRow(row.id, { description: e.target.value })}/></label>
               <label className="daily-description-edit daily-note-edit"><span>Napomena</span><input value={row.note || ''} onChange={e => updateDailyRow(row.id, { note: e.target.value })} placeholder="Interna napomena"/></label>
@@ -290,11 +330,12 @@ Pozdrav`);
           </div>
         </div>
       </div>}
+
     </section> : <section className="simple-module transfer-module">
       <div className="daily-refill-entry-row"><button className="daily-refill-main-button" onClick={() => setTransferView('daily')}><ClipboardList size={18}/> Dnevni refil</button></div>
       <h2>Dopuna materijala</h2>
       <div className="form-grid">
-        <label className="art-input-wrap"><span>ART-</span><input placeholder="123456" inputMode="numeric" maxLength="6" value={transferForm.art} onChange={e => setTransferForm(f => ({...f, art:e.target.value.replace(/\D/g, '').slice(0, 6)}))}/></label>
+        <label className="art-input-wrap"><span>ART-</span><input list="transfer-art-options" placeholder="123456" inputMode="numeric" maxLength="6" value={transferForm.art} onChange={e => setTransferForm(f => ({...f, art:e.target.value.replace(/\D/g, '').slice(0, 6)}))} onBlur={resolveTransferArt}/><datalist id="transfer-art-options">{transferArtSuggestions.map(item => <option key={`art-${item.art}-${item.location}`} value={item.art.replace('ART-', '')}>{item.location}</option>)}</datalist></label>
         <input placeholder="Količina" inputMode="decimal" value={transferForm.qty} onChange={e => setTransferForm(f => ({...f, qty:e.target.value}))}/>
         <><input list="bulk-location-options" placeholder="Bulk" value={transferForm.from} onChange={e => setTransferForm(f => ({...f, from:uppercaseProductionLocation(e.target.value)}))} onBlur={() => resolveTransferLocation('from')}/><datalist id="bulk-location-options">{bulkLocationSuggestions.map(item => <option key={`${item.art}-${item.location}`} value={item.location}>{item.art}</option>)}</datalist></>
         <><input list="pick-location-options" placeholder="Pick" value={transferForm.to} onChange={e => setTransferForm(f => ({...f, to:uppercaseProductionLocation(e.target.value)}))} onBlur={() => resolveTransferLocation('to')}/><datalist id="pick-location-options">{pickLocationSuggestions.map(item => <option key={`${item.art}-${item.location}`} value={item.location}>{item.art}</option>)}</datalist></>

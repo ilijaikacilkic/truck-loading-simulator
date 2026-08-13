@@ -428,7 +428,17 @@ export function inferDailyUnitOfMeasure(description) {
     'ziegel',
     'zijgel',
     'geleider',
-    'lamel'
+    'lamel',
+    'bandop',
+    'band op',
+    'bandopwinder',
+    'bandop winder',
+    'bandopbinder',
+    'bandop binder',
+    'duplove',
+    'duplo',
+    'inder',
+    'binder'
   ];
   if (meterKeywords.some(keyword => text.includes(keyword))) return 'M1';
   return 'STUK';
