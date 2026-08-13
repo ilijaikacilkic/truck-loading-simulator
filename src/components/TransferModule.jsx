@@ -191,12 +191,32 @@ export default function TransferModule({ ctx }) {
     setDailyDeleteCandidate(null);
   }
 
+  function hasDailyQuantity(row) {
+    const raw = String(row?.transferQty ?? '').trim().replace(',', '.');
+    if (!raw) return false;
+    const quantity = Number(raw);
+    return Number.isFinite(quantity) && quantity > 0;
+  }
+
+  function warnMissingDailyQuantity(row) {
+    const art = String(row?.art || '').trim() || 'ovaj ART';
+    alert(`Nisi uneo količinu za ${art}.`);
+  }
+
+  function firstDailyRowMissingQuantity(rows) {
+    return (rows || []).find(row => !hasDailyQuantity(row));
+  }
+
   function toggleDailyPicked(rowId, event) {
     if (event?.target?.closest('button, input, select, textarea, a, label')) return;
     if (dailyMoveAnimation) return;
     const currentRow = dailyRows.find(row => row.id === rowId);
     if (!currentRow) return;
     const targetPicked = !currentRow.picked;
+    if (targetPicked && !hasDailyQuantity(currentRow)) {
+      warnMissingDailyQuantity(currentRow);
+      return;
+    }
     setDailyMoveAnimation({ id: rowId, targetPicked });
     window.setTimeout(() => {
       setDailyRows(rows => rows.map(row => row.id === rowId ? {
@@ -215,12 +235,22 @@ export default function TransferModule({ ctx }) {
       alert('Nema zelenih stavki za export. Označi završene stavke double-clickom.');
       return;
     }
+    const missingQuantityRow = firstDailyRowMissingQuantity(dailyExportRows);
+    if (missingQuantityRow) {
+      warnMissingDailyQuantity(missingQuantityRow);
+      return;
+    }
     downloadDailyRefillXlsx(dailyExportRows);
   }
 
   function emailDailyRefill() {
     if (!dailyExportRows.length) {
       alert('Nema zelenih stavki za export. Označi završene stavke double-clickom.');
+      return;
+    }
+    const missingQuantityRow = firstDailyRowMissingQuantity(dailyExportRows);
+    if (missingQuantityRow) {
+      warnMissingDailyQuantity(missingQuantityRow);
       return;
     }
     downloadDailyRefillXlsx(dailyExportRows);

@@ -417,6 +417,20 @@ function normalizeDailyDescriptionText(description) {
 export function inferDailyUnitOfMeasure(description) {
   const text = normalizeDailyDescriptionText(description);
   if (text.includes('zijkap')) return 'SET';
+
+  // Bandopwinder je komad (STUK), čak i kada opis sadrži reč "band".
+  const pieceKeywords = [
+    'bandopwinder',
+    'bandop winder',
+    'bandopbinder',
+    'bandop binder'
+  ];
+  if (pieceKeywords.some(keyword => text.includes(keyword))) return 'STUK';
+
+  // Band 14 mm je traka/metraža i knjiži se kao M1.
+  const isBand14mm = /(?:^|\s)band(?:\s|$)/.test(text) && /(?:^|\s)14\s*mm(?:\s|$)/.test(text);
+  if (isBand14mm) return 'M1';
+
   const meterKeywords = [
     'bovenkap',
     'onderkap',
@@ -429,12 +443,6 @@ export function inferDailyUnitOfMeasure(description) {
     'zijgel',
     'geleider',
     'lamel',
-    'bandop',
-    'band op',
-    'bandopwinder',
-    'bandop winder',
-    'bandopbinder',
-    'bandop binder',
     'duplove',
     'duplo',
     'inder',
