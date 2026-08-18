@@ -78,7 +78,7 @@ export default function TransferModule({ ctx }) {
     setTransferForm(current => ({
       ...current,
       art: entry.art.replace('ART-', ''),
-      from: current.from || entry.location
+      to: current.to || entry.location
     }));
   }
 
@@ -148,7 +148,7 @@ export default function TransferModule({ ctx }) {
       return {
         ...row,
         art: entry.art,
-        bulkLocation: row.bulkLocation || entry.location
+        pickLocation: row.pickLocation || entry.location
       };
     }));
   }
