@@ -64,7 +64,7 @@ export default function App() {
   const [productionWriteoffs, setProductionWriteoffs] = useState(() => {
     try { return JSON.parse(localStorage.getItem(PRODUCTION_WRITEOFF_STORAGE_KEY)) || []; } catch { return []; }
   });
-  const [transferForm, setTransferForm] = useState({ art: '', qty: '', from: '', to: '', note: '' });
+  const [transferForm, setTransferForm] = useState({ art: '', qty: '', from: '', to: '', description: '', note: '' });
   const [countForm, setCountForm] = useState({ art: '', qty: '', position: '', note: '' });
   const [inventoryForm, setInventoryForm] = useState({ art: '', name: '', qty: '', position: '', note: '' });
   const [historySearch, setHistorySearch] = useState('');
@@ -624,7 +624,7 @@ Pozdrav`);
       to: normalizeWarehouseLocation(transferForm.to)
     };
     setTransfers(rows => [record, ...rows]);
-    setTransferForm({ art: '', qty: '', from: '', to: '', note: '' });
+    setTransferForm({ art: '', qty: '', from: '', to: '', description: '', note: '' });
   }
 
   function saveCountRecord() {

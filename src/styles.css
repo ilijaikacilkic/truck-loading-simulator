@@ -1146,3 +1146,6 @@ input{text-transform:none}input[placeholder="Bulk"],input[placeholder="Pick"],in
   .daily-refill-card-moving-up,
   .daily-refill-card-arrived{animation-duration:.01ms!important}
 }
+
+/* Production inventory description + shared-location ART picker */
+.daily-card-row select,.transfer-shared-art-select select{width:100%;min-height:38px;border:1px solid #bfdbfe;border-radius:10px;padding:7px 9px;font-size:14px;background:#fff;color:#0f172a}.transfer-shared-art-select{display:grid;gap:3px}.transfer-shared-art-select span{font-size:11px;text-transform:uppercase;letter-spacing:.06em;font-weight:1000;color:#0f3a66}.transfer-description-field[readonly]{background:#f8fafc;color:#475467}

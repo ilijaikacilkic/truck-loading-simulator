@@ -2,7 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { Trash2, Plus, FileSpreadsheet, Mail, UploadCloud, ClipboardList, ArrowLeft } from 'lucide-react';
 import { TRANSFER_EMAIL } from '../utils/constants.js';
 import { cleanLocationInput, normalizeArtNumber } from '../utils/dataFormat.js';
-import { findProductionInventoryEntry, normalizeProductionLocation, searchProductionInventory, uppercaseProductionLocation } from '../utils/productionInventory.js';
+import { findProductionInventoryEntriesByLocation, findProductionInventoryEntry, normalizeProductionLocation, searchProductionInventory, uppercaseProductionLocation } from '../utils/productionInventory.js';
 import {
   downloadDailyRefillXlsx,
   formatDailyRefillRowsForEmail,
@@ -71,22 +71,43 @@ export default function TransferModule({ ctx }) {
   const transferArtSuggestions = searchProductionInventory(transferForm.art, 12);
   const bulkLocationSuggestions = searchProductionInventory(transferForm.from, 12);
   const pickLocationSuggestions = searchProductionInventory(transferForm.to, 12);
+  const transferFromMatches = findProductionInventoryEntriesByLocation(transferForm.from);
+  const transferToMatches = findProductionInventoryEntriesByLocation(transferForm.to);
+  const transferLocationMatches = transferToMatches.length > 1 ? transferToMatches : (transferFromMatches.length > 1 ? transferFromMatches : []);
 
-  function resolveTransferArt() {
-    const entry = findProductionInventoryEntry(transferForm.art);
+  function resolveTransferArt(value = transferForm.art) {
+    const entry = findProductionInventoryEntry(value);
     if (!entry) return;
     setTransferForm(current => ({
       ...current,
       art: entry.art.replace('ART-', ''),
-      to: current.to || entry.location
+      to: current.to || entry.location,
+      description: entry.description || ''
     }));
   }
 
   function resolveTransferLocation(field) {
     const value = transferForm[field];
-    const entry = findProductionInventoryEntry(value);
-    if (entry) {
-      setTransferForm(current => ({ ...current, [field]: entry.location, art: entry.art.replace('ART-', '') }));
+    const matches = findProductionInventoryEntriesByLocation(value);
+    if (matches.length === 1) {
+      const entry = matches[0];
+      setTransferForm(current => ({
+        ...current,
+        [field]: entry.location,
+        art: entry.art.replace('ART-', ''),
+        description: entry.description || ''
+      }));
+      return;
+    }
+    if (matches.length > 1) {
+      const currentArt = `ART-${String(transferForm.art || '').replace(/\D/g, '').padStart(6, '0')}`;
+      const selected = matches.find(item => item.art === currentArt);
+      setTransferForm(current => ({
+        ...current,
+        [field]: matches[0].location,
+        art: selected ? selected.art.replace('ART-', '') : '',
+        description: selected?.description || ''
+      }));
       return;
     }
     const normalized = normalizeProductionLocation(value);
@@ -148,16 +169,29 @@ export default function TransferModule({ ctx }) {
       return {
         ...row,
         art: entry.art,
-        pickLocation: row.pickLocation || entry.location
+        pickLocation: row.pickLocation || entry.location,
+        description: entry.description || ''
       };
     }));
   }
 
   function resolveDailyLocation(id, field, value) {
-    const entry = findProductionInventoryEntry(value);
+    const matches = findProductionInventoryEntriesByLocation(value);
     setDailyRows(rows => rows.map(row => {
       if (row.id !== id) return row;
-      if (entry) return { ...row, [field]: entry.location, art: entry.art };
+      if (matches.length === 1) {
+        const entry = matches[0];
+        return { ...row, [field]: entry.location, art: entry.art, description: entry.description || '' };
+      }
+      if (matches.length > 1) {
+        const selected = matches.find(item => item.art === normalizeArtNumber(row.art));
+        return {
+          ...row,
+          [field]: matches[0].location,
+          art: selected?.art || '',
+          description: selected?.description || ''
+        };
+      }
       return { ...row, [field]: normalizeProductionLocation(value) };
     }));
   }
@@ -319,6 +353,9 @@ Pozdrav`);
               ? (moveState.targetPicked ? ' daily-refill-card-moving-down' : ' daily-refill-card-moving-up')
               : '';
             const arrivedClass = dailyArrivedRowId === row.id ? ' daily-refill-card-arrived' : '';
+            const dailyPickMatches = findProductionInventoryEntriesByLocation(row.pickLocation);
+            const dailyBulkMatches = findProductionInventoryEntriesByLocation(row.bulkLocation);
+            const dailyLocationMatches = dailyPickMatches.length > 1 ? dailyPickMatches : (dailyBulkMatches.length > 1 ? dailyBulkMatches : []);
             return <article
             className={`daily-refill-card daily-refill-card-v145${visuallyPicked ? ' daily-refill-card-picked' : ''}${movementClass}${arrivedClass}`}
             key={row.id}
@@ -328,7 +365,7 @@ Pozdrav`);
             <div className="daily-card-index">{index + 1}</div>
             <div className="daily-card-main">
               <div className="daily-card-row daily-card-art-row">
-                <label><span>ART</span><input list={`daily-art-options-${row.id}`} inputMode="numeric" value={row.art || ''} onChange={e => updateDailyRow(row.id, { art: e.target.value.toUpperCase() })} onBlur={e => resolveDailyArt(row.id, e.target.value)}/><datalist id={`daily-art-options-${row.id}`}>{searchProductionInventory(row.art, 10).map(item => <option key={`${row.id}-art-${item.art}-${item.location}`} value={item.art}>{item.location}</option>)}</datalist></label>
+                <label><span>ART</span>{dailyLocationMatches.length > 1 ? <select value={row.art || ''} onChange={e => resolveDailyArt(row.id, e.target.value)}><option value="">Izaberi ART</option>{dailyLocationMatches.map(item => <option key={`${row.id}-shared-art-${item.art}-${item.location}`} value={item.art}>{item.art}</option>)}</select> : <><input list={`daily-art-options-${row.id}`} inputMode="numeric" value={row.art || ''} onChange={e => updateDailyRow(row.id, { art: e.target.value.toUpperCase(), description: '' })} onBlur={e => resolveDailyArt(row.id, e.target.value)}/><datalist id={`daily-art-options-${row.id}`}>{searchProductionInventory(row.art, 10).map(item => <option key={`${row.id}-art-${item.art}-${item.location}`} value={item.art}>{item.location}</option>)}</datalist></>}</label>
                 <div className="daily-card-status-actions">
                   {visuallyPicked && <span className="daily-picked-badge">Na piku</span>}
                   <button className="icon-danger daily-delete-row" onClick={() => requestDeleteDailyRow(row)} title="Obriši stavku"><Trash2 size={15}/></button>
@@ -365,11 +402,12 @@ Pozdrav`);
       <div className="daily-refill-entry-row"><button className="daily-refill-main-button" onClick={() => setTransferView('daily')}><ClipboardList size={18}/> Dnevni refil</button></div>
       <h2>Dopuna materijala</h2>
       <div className="form-grid">
-        <label className="art-input-wrap"><span>ART-</span><input list="transfer-art-options" placeholder="123456" inputMode="numeric" maxLength="6" value={transferForm.art} onChange={e => setTransferForm(f => ({...f, art:e.target.value.replace(/\D/g, '').slice(0, 6)}))} onBlur={resolveTransferArt}/><datalist id="transfer-art-options">{transferArtSuggestions.map(item => <option key={`art-${item.art}-${item.location}`} value={item.art.replace('ART-', '')}>{item.location}</option>)}</datalist></label>
+        {transferLocationMatches.length > 1 ? <label className="transfer-shared-art-select"><span>ART</span><select value={transferForm.art ? `ART-${transferForm.art.replace(/\D/g, '').padStart(6, '0')}` : ''} onChange={e => resolveTransferArt(e.target.value)}><option value="">Izaberi ART</option>{transferLocationMatches.map(item => <option key={`shared-transfer-${item.art}-${item.location}`} value={item.art}>{item.art}</option>)}</select></label> : <label className="art-input-wrap"><span>ART-</span><input list="transfer-art-options" placeholder="123456" inputMode="numeric" maxLength="6" value={transferForm.art} onChange={e => setTransferForm(f => ({...f, art:e.target.value.replace(/\D/g, '').slice(0, 6), description:''}))} onBlur={e => resolveTransferArt(e.target.value)}/><datalist id="transfer-art-options">{transferArtSuggestions.map(item => <option key={`art-${item.art}-${item.location}`} value={item.art.replace('ART-', '')}>{item.location}</option>)}</datalist></label>}
         <input placeholder="Količina" inputMode="decimal" value={transferForm.qty} onChange={e => setTransferForm(f => ({...f, qty:e.target.value}))}/>
         <><input list="bulk-location-options" placeholder="Bulk" value={transferForm.from} onChange={e => setTransferForm(f => ({...f, from:uppercaseProductionLocation(e.target.value)}))} onBlur={() => resolveTransferLocation('from')}/><datalist id="bulk-location-options">{bulkLocationSuggestions.map(item => <option key={`${item.art}-${item.location}`} value={item.location}>{item.art}</option>)}</datalist></>
         <><input list="pick-location-options" placeholder="Pick" value={transferForm.to} onChange={e => setTransferForm(f => ({...f, to:uppercaseProductionLocation(e.target.value)}))} onBlur={() => resolveTransferLocation('to')}/><datalist id="pick-location-options">{pickLocationSuggestions.map(item => <option key={`${item.art}-${item.location}`} value={item.location}>{item.art}</option>)}</datalist></>
-        <input className="wide" placeholder="Opis / napomena" value={transferForm.note} onChange={e => setTransferForm(f => ({...f, note:e.target.value}))}/>
+        <input className="wide transfer-description-field" placeholder="Opis artikla" value={transferForm.description || ''} readOnly/>
+        <input className="wide" placeholder="Napomena (opcionalno)" value={transferForm.note} onChange={e => setTransferForm(f => ({...f, note:e.target.value}))}/>
         <div className="wide form-actions">
           <button onClick={saveTransferRecord}><Plus size={16}/> Dodaj stavku</button>
           <button className="ghost" onClick={exportTransferExcel} disabled={!transfers.length}><FileSpreadsheet size={16}/> Preuzmi Excel</button>
@@ -386,6 +424,7 @@ Pozdrav`);
             <span><strong>Količina:</strong> {r.qty || '-'}</span>
             <span><strong>Bulk:</strong> {r.from || '-'}</span>
             <span><strong>Pick:</strong> {r.to || '-'}</span>
+            {r.description && <span><strong>Opis:</strong> {r.description}</span>}
             {r.note && <span><strong>Napomena:</strong> {r.note}</span>}
           </div>
           <small>{formatDateTime(r.createdAt)}</small>

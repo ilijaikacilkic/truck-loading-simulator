@@ -195,6 +195,7 @@ export function formatTransferRowsForEmail(rows) {
       `Bulk: ${row.from || '-'}`,
       `Pick: ${row.to || '-'}`
     ];
+    if (row.description) lines.push(`Opis: ${row.description}`);
     if (row.note) lines.push(`Napomena: ${row.note}`);
     return lines.join('\n');
   }).join('\n\n────────────────\n\n');
@@ -205,8 +206,8 @@ export function downloadTransferXlsx(rows) {
     ['Dopuna materijala', '', '', ''],
     ['Datum', todaySrDate(), '', ''],
     [],
-    ['#', 'Art', 'Količina', 'Bulk', 'Pick', 'Napomena'],
-    ...rows.map((row, index) => [index + 1, normalizeArtNumber(row.art) || row.art || '', row.qty || '', normalizeWarehouseLocation(row.from) || row.from || '', normalizeWarehouseLocation(row.to) || row.to || '', row.note || ''])
+    ['#', 'Art', 'Količina', 'Bulk', 'Pick', 'Opis', 'Napomena'],
+    ...rows.map((row, index) => [index + 1, normalizeArtNumber(row.art) || row.art || '', row.qty || '', normalizeWarehouseLocation(row.from) || row.from || '', normalizeWarehouseLocation(row.to) || row.to || '', row.description || '', row.note || ''])
   ];
   downloadXlsxFile(`dopuna-materijala-${dateIso}.xlsx`, rowsForSheet, 'Dopuna');
 }
